@@ -7,7 +7,7 @@ def clickable(widget):
         
         def eventFilter(self, obj, event):
             if obj == widget:
-                if event.type() == QEvent.MousePressEvent:
+                if event.type() == QEvent.MousePressEvent: # type: ignore
                     if obj.rect().contains(event.pos()):
                         self.clicked.emit()
                         return True
