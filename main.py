@@ -89,8 +89,7 @@ class Main(QWidget):
         self.fingerStatus.setFont(self.font_sub)
         self.label_CurrentDateTime.setFont(self.font_date)
 
-        # full window width, centered under the lock icon
-        self.fingerStatus.setGeometry(0, 879, 600, 77)
+        self.fingerStatus.setGeometry(0, 879, 600, 77) # centerize or smth
         self.fingerStatus.setAlignment(QtCore.Qt.AlignmentFlag.AlignHCenter)
         self.label_SchoolName.adjustSize()
         self.label_RoomName.adjustSize()
@@ -105,8 +104,7 @@ class Main(QWidget):
         bgY = (self.height() - self.errorBg.height()) // 2
         self.errorBg.move(bgX, bgY)
 
-        # message goes inside the frame, under its divider line
-        self.errorLog = QLabel(error_name, self)
+        self.errorLog = QLabel(error_name, self) # error msg
         self.errorLog.setStyleSheet("background-color : transparent; color : white;")
         font_error = self.errorLog.font()
         font_error.setFamily('Pretendard JP Variable')
