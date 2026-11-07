@@ -21,8 +21,14 @@ class Main(QWidget):
         self.setWindowTitle("fps")
         self.setStyleSheet("background-color : white;")
         self.setFixedSize(600, 1024)
+        self.lockStatusImg = [QPixmap("assets/imgs/idle.png"), QPixmap("assets/imgs/unlock.png"), QPixmap("assets/imgs/unknown.png")]
+        
+        # server
+        self.backend = MainBackend()
+        if self.backend.getStatus() == BackendStatus.DATABASE_WAIT or self.backend.getStatus() == BackendStatus.DATABASE_GENERIC_ERROR:
+            self.showError("정상적으로 백앤드에 접속하지 못하였습니다.\n다른 프로세스가 접근하고 있는지 확인해주십시오.")
 
-        # fingerprint status
+        # fingerprint
         self.fingerPrintModule = FingerPrint()
         self.fingerPrintStatus = self.fingerPrintModule.getStatus()
         if self.fingerPrintStatus != FingerPrintStatus.DEVICE_NOT_SETUP and not self.isdemo:
@@ -42,7 +48,6 @@ class Main(QWidget):
         else:
             self.showError("모듈이 정상적으로 인식이 되지 않습니다.\n유지보수 판을 열어 모듈의 연결선이 정상적으로 연결이 되어있는지 확인해주십시오.")
 
-        # show only after children exist, otherwise they stay hidden on Linux
         if platform.system() not in ('Darwin', 'Windows'):
             self.showMaximized()
 
@@ -60,7 +65,8 @@ class Main(QWidget):
 
         # images
         self.img_LockStatus = QLabel(self)
-        self.img_LockStatus.setPixmap(QPixmap('assets/imgs/idle.png'))
+        self.img_LockStatus.setPixmap(self.lockStatusImg[0])
+
         self.img_SchoolLogo = QLabel(self)
         self.img_SchoolLogo.setPixmap(QPixmap('assets/imgs/schoollogo.png'))
 
@@ -113,7 +119,7 @@ class Main(QWidget):
         bgY = (self.height() - self.errorBg.height()) // 2
         self.errorBg.move(bgX, bgY)
 
-        self.errorLog = QLabel(error_name, self) # error msg
+        self.errorLog = QLabel(error_name+f"\n\nFINGERPRINT CODE: {self.fingerPrintModule.getStatus().name}\nBACKEND CODE: {self.backend.getStatus().name}", self) # error msg
         self.errorLog.setStyleSheet("background-color : transparent; color : white;")
         font_error = self.errorLog.font()
         font_error.setFamily('Pretendard JP Variable')
@@ -132,13 +138,15 @@ class Main(QWidget):
         self.status = self.fingerPrintModule.getStatus()
         match self.status:
             case FingerPrintStatus.DEVICE_NOT_RESPONSIVE:
-                self.showError("모듈")
+                self.showError(f"모듈 응답이 없습니다.\n이 화면이 처음이면 기기를 재부팅 해주십시오.")
             case FingerPrintStatus.DEVICE_NOT_SETUP:
-                self.showError("모듈이 정상적으로 인식이 되지 않습니다.\n유지보수 판을 열어 모듈의 연결선이 정상적으로 연결이 되어있는지 확인해주십시오.")
+                self.showError(f"모듈이 정상적으로 인식이 되지 않습니다.\n유지보수 판을 열어 모듈의 연결선이 정상적으로 연결이 되어있는지 확인해주십시오.")
+            case _:
+                pass
 
 if __name__ == '__main__':
     parse = argparse.ArgumentParser()
-    parse.add_argument('--demo', required=False, default='', help='enable demo mode (module not required)')
+    parse.add_argument('--demo', help='enable demo mode (module not required)')
     arg = parse.parse_args()
 
     app = QApplication(sys.argv[0:])

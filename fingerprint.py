@@ -10,19 +10,21 @@ class FingerPrintStatus(Enum):
     DEVICE_NOT_SETUP = 1
     DEVICE_NOT_RESPONSIVE = 2
 
-    FINGERPRINT_FAILED = 3
-    FINGERPRINT_UNKNOWN = 4
+    FINGERPRINT_FAILED = 3 # register fail
+    FINGERPRINT_UNKNOWN = 4 # not found
 
-    SCAN_FAILURE = 5
+    SCAN_FAILURE = 5 # didn't captured
     SCAN_SUCCESS = 6
 
 class FingerPrint():
     def __init__(self):
         super().__init__()
-        print('Start load module')
+        print('module: startup')
         self.port = cfg["Fingerprint"]["Port"]
         self.status = FingerPrintStatus.DEVICE_WAIT
         if not self.port: self.status = FingerPrintStatus.DEVICE_NOT_SETUP
+        else: self.status = FingerPrintStatus.DEVICE_IDLE
+        print('module: started')
 
     def getStatus(self):
         return self.status
@@ -37,6 +39,8 @@ class FingerPrint():
             match response.decode('utf-8').strip():
                 case "READY":
                     self.status = FingerPrintStatus.DEVICE_IDLE
+                case "SUCCESS":
+                    finger_id = ser.readline()
                 case _:
                     self.status = FingerPrintStatus.DEVICE_WAIT
         except serial.SerialTimeoutException:
