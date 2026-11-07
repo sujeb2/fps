@@ -23,14 +23,15 @@ class Main(QWidget):
         self.setFixedSize(600, 1024)
         self.lockStatusImg = [QPixmap("assets/imgs/idle.png"), QPixmap("assets/imgs/unlock.png"), QPixmap("assets/imgs/unknown.png")]
         
-        # server
-        self.backend = MainBackend()
-        if self.backend.getStatus() == BackendStatus.DATABASE_WAIT or self.backend.getStatus() == BackendStatus.DATABASE_GENERIC_ERROR:
-            self.showError("정상적으로 백앤드에 접속하지 못하였습니다.\n다른 프로세스가 접근하고 있는지 확인해주십시오.")
-
         # fingerprint
         self.fingerPrintModule = FingerPrint()
         self.fingerPrintStatus = self.fingerPrintModule.getStatus()
+
+        # server
+        self.backend = MainBackend()
+        if self.backend.getStatus() != BackendStatus.DATABASE_READY:
+            self.showError("정상적으로 백앤드에 접속하지 못하였습니다.\n다른 프로세스가 접근하고 있는지 확인해주십시오.")
+
         if self.fingerPrintStatus != FingerPrintStatus.DEVICE_NOT_SETUP and not self.isdemo:
             self.idleUISetup()
 
@@ -110,6 +111,8 @@ class Main(QWidget):
         self.label_RoomName.adjustSize()
 
     def showError(self, error_name: str):
+        print(f"FAILED!!\nError log: "
+              +error_name+f"\n\nFINGERPRINT CODE: {self.fingerPrintStatus.name}\nBACKEND CODE: {self.backend.getStatus().name}")
         self.setStyleSheet("background-color : black;")
         self.errorBg = QLabel(self)
         self.errorBg.setPixmap(QPixmap('assets/imgs/error.png'))
@@ -119,7 +122,7 @@ class Main(QWidget):
         bgY = (self.height() - self.errorBg.height()) // 2
         self.errorBg.move(bgX, bgY)
 
-        self.errorLog = QLabel(error_name+f"\n\nFINGERPRINT CODE: {self.fingerPrintModule.getStatus().name}\nBACKEND CODE: {self.backend.getStatus().name}", self) # error msg
+        self.errorLog = QLabel(error_name+f"\n\nFINGERPRINT CODE: {self.fingerPrintStatus.name}\nBACKEND CODE: {self.backend.getStatus().name}", self) # error msg
         self.errorLog.setStyleSheet("background-color : transparent; color : white;")
         font_error = self.errorLog.font()
         font_error.setFamily('Pretendard JP Variable')

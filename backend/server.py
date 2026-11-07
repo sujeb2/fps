@@ -6,6 +6,7 @@ class BackendStatus(Enum):
     DATABASE_GENERIC_ERROR = -1
     DATABASE_WAIT = 0
     DATABASE_DATA_SAVED = 1
+    DATABASE_READY = 2
     DATABASE_NOT_CLOSED = 3
 
 class MainBackend:
@@ -25,6 +26,7 @@ class MainBackend:
             ''')
             self.db.commit()
             self.db.close()
+            self.status = BackendStatus.DATABASE_READY
             print('db: loaded')
         except sqlite3.Error as e:
             self.status = BackendStatus.DATABASE_GENERIC_ERROR
