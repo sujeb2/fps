@@ -1,5 +1,7 @@
-import configparser, sys, platform, whynotclick
+import configparser, sys, platform, whynotclick, argparse
 from fingerprint import FingerPrintStatus, FingerPrint
+from backend.server import BackendStatus, MainBackend
+
 from PyQt6.QtWidgets import QWidget, QLabel, QApplication
 from PyQt6.QtGui import QPixmap
 from PyQt6.QtCore import QDateTime
@@ -11,8 +13,9 @@ COLOR_MAIN = f'background-color : white; Color : {cfg["School"]["MainColor"]};'
 COLOR_SUB = f'background-color : white; Color : {cfg["School"]["SubColor"]};'
 
 class Main(QWidget):
-    def __init__(self):
-        print(f'Start fps-project.. PyQt Version: {QtCore.qVersion()}')
+    def __init__(self, isdemo):
+        self.isdemo = isdemo
+        print(f'Start fps-project.. PyQt Version: {QtCore.qVersion()}, isdemo: {self.isdemo}')
         super().__init__()
 
         self.setWindowTitle("fps")
@@ -22,14 +25,20 @@ class Main(QWidget):
         # fingerprint status
         self.fingerPrintModule = FingerPrint()
         self.fingerPrintStatus = self.fingerPrintModule.getStatus()
-        if self.fingerPrintStatus != FingerPrintStatus.DEVICE_NOT_SETUP:
-            self.setupWidget()
+        if self.fingerPrintStatus != FingerPrintStatus.DEVICE_NOT_SETUP and not self.isdemo:
+            self.idleUISetup()
 
             # date time (label_CurrentDateTime only exists after setupWidget)
             self.updateCurrentDateTime()
             self.dateTimeTimer = QtCore.QTimer(self)
             self.dateTimeTimer.timeout.connect(self.updateCurrentDateTime)
             self.dateTimeTimer.start(1000)
+
+            # fingerprint module checker
+            self.checkFingerprintStatus()
+            self.fingerPrintStatusTicker = QtCore.QTimer(self)
+            self.fingerPrintStatusTicker.timeout.connect(self.checkFingerprintStatus)
+            self.fingerPrintStatusTicker.start(1000)
         else:
             self.showError("모듈이 정상적으로 인식이 되지 않습니다.\n유지보수 판을 열어 모듈의 연결선이 정상적으로 연결이 되어있는지 확인해주십시오.")
 
@@ -37,7 +46,7 @@ class Main(QWidget):
         if platform.system() not in ('Darwin', 'Windows'):
             self.showMaximized()
 
-    def setupWidget(self):
+    def idleUISetup(self):
         roomName = cfg["School"]["RoomName"]
         schoolName = cfg["School"]["SchoolName"]
         if not roomName: roomName = "지정되지 않은 이름"
@@ -119,8 +128,20 @@ class Main(QWidget):
         self.label_CurrentDateTime.setText(currentDateTime.toString("yyyy/MM/dd h:mmAP"))
         self.label_CurrentDateTime.adjustSize()
 
+    def checkFingerprintStatus(self):
+        self.status = self.fingerPrintModule.getStatus()
+        match self.status:
+            case FingerPrintStatus.DEVICE_NOT_RESPONSIVE:
+                self.showError("모듈")
+            case FingerPrintStatus.DEVICE_NOT_SETUP:
+                self.showError("모듈이 정상적으로 인식이 되지 않습니다.\n유지보수 판을 열어 모듈의 연결선이 정상적으로 연결이 되어있는지 확인해주십시오.")
+
 if __name__ == '__main__':
+    parse = argparse.ArgumentParser()
+    parse.add_argument('--demo', required=False, default='', help='enable demo mode (module not required)')
+    arg = parse.parse_args()
+
     app = QApplication(sys.argv[0:])
-    win = Main()
+    win = Main(arg.demo)
     win.show()
     app.exec()
