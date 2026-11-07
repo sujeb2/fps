@@ -32,22 +32,30 @@ class Main(QWidget):
         if self.backend.getStatus() != BackendStatus.DATABASE_READY:
             self.showError("정상적으로 백앤드에 접속하지 못하였습니다.\n다른 프로세스가 접근하고 있는지 확인해주십시오.")
 
-        if self.fingerPrintStatus != FingerPrintStatus.DEVICE_NOT_SETUP and not self.isdemo:
-            self.idleUISetup()
+        if self.isdemo == '':
+            if self.fingerPrintStatus != FingerPrintStatus.DEVICE_NOT_SETUP:
+                self.idleUISetup()
 
-            # date time (label_CurrentDateTime only exists after setupWidget)
-            self.updateCurrentDateTime()
-            self.dateTimeTimer = QtCore.QTimer(self)
-            self.dateTimeTimer.timeout.connect(self.updateCurrentDateTime)
-            self.dateTimeTimer.start(1000)
+                # fingerprint module checker
+                """
+                self.checkFingerprintStatus()
+                self.fingerPrintStatusTicker = QtCore.QTimer(self)
+                self.fingerPrintStatusTicker.timeout.connect(self.checkFingerprintStatus)
+                self.fingerPrintStatusTicker.start(1000)
+                """
 
-            # fingerprint module checker
-            self.checkFingerprintStatus()
-            self.fingerPrintStatusTicker = QtCore.QTimer(self)
-            self.fingerPrintStatusTicker.timeout.connect(self.checkFingerprintStatus)
-            self.fingerPrintStatusTicker.start(1000)
+                # backend status checker
+                
+            else:
+                self.showError("모듈이 정상적으로 인식이 되지 않습니다.\n유지보수 판을 열어 모듈의 연결선이 정상적으로 연결이 되어있는지 확인해주십시오.")
         else:
-            self.showError("모듈이 정상적으로 인식이 되지 않습니다.\n유지보수 판을 열어 모듈의 연결선이 정상적으로 연결이 되어있는지 확인해주십시오.")
+            self.idleUISetup() # demo mode
+                
+        # date time (label_CurrentDateTime only exists after setupWidget)
+        self.updateCurrentDateTime()
+        self.dateTimeTimer = QtCore.QTimer(self)
+        self.dateTimeTimer.timeout.connect(self.updateCurrentDateTime)
+        self.dateTimeTimer.start(1000)
 
         if platform.system() not in ('Darwin', 'Windows'):
             self.showMaximized()
@@ -149,7 +157,7 @@ class Main(QWidget):
 
 if __name__ == '__main__':
     parse = argparse.ArgumentParser()
-    parse.add_argument('--demo', help='enable demo mode (module not required)')
+    parse.add_argument('--demo', default='', help='enable demo mode (module not required)')
     arg = parse.parse_args()
 
     app = QApplication(sys.argv[0:])

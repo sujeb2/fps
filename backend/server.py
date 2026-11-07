@@ -8,6 +8,7 @@ class BackendStatus(Enum):
     DATABASE_DATA_SAVED = 1
     DATABASE_READY = 2
     DATABASE_NOT_CLOSED = 3
+    DATA_SETUP_ERROR = 4
 
 class MainBackend:
     def __init__(self):
@@ -40,3 +41,12 @@ class MainBackend:
         self.rows = self.con.fetchall()
         print(f'db: fetched user id {id+1}, information: {self.rows[id+1]}')
         return self.rows[id+1]
+
+    def writeInformation(self, name="None", fingerid="None"):
+        data = [
+            (name, fingerid)
+        ]
+        if name == "None" or fingerid == "None":
+            print("db: parameter 'name or 'fingerid' has not set up correctly.")
+            self.status = BackendStatus.DATA_SETUP_ERROR
+        
