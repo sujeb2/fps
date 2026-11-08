@@ -1,6 +1,6 @@
 import sqlite3
-from fastapi import FastAPI
 from enum import Enum
+from pathlib import Path
 
 class BackendStatus(Enum):
     DATABASE_GENERIC_ERROR = -1
@@ -11,22 +11,20 @@ class BackendStatus(Enum):
     DATA_SETUP_ERROR = 4
 
 class MainBackend:
-    def __init__(self):
+    def __init__(self, db_path: str | Path | None = None):
         super().__init__()
         print('db: starting up')
         self.status = BackendStatus.DATABASE_WAIT
+        self.db_path = Path(db_path) if db_path is not None else Path(__file__).resolve().parent.parent / 'user.db'
         try:
-            self.db = sqlite3.connect('user.db')
-            self.con = self.db.cursor()
-            self.con.execute('''CREATE TABLE IF NOT EXISTS fingerprint(
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                name TEXT NOT NULL,
-                fingerid TEXT NOT NULL,
-                created_at TEXT DEFAULT CURRENT_TIMESTAMP
-            )
-            ''')
-            self.db.commit()
-            self.db.close()
+            with sqlite3.connect(self.db_path) as db:
+                db.execute('''CREATE TABLE IF NOT EXISTS fingerprint(
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    name TEXT NOT NULL,
+                    fingerid TEXT NOT NULL,
+                    created_at TEXT DEFAULT CURRENT_TIMESTAMP
+                )
+                ''')
             self.status = BackendStatus.DATABASE_READY
             print('db: loaded')
         except sqlite3.Error as e:
@@ -37,16 +35,22 @@ class MainBackend:
         return self.status
 
     def fetchInformation(self, id: int):
-        self.con.execute('SELECT * FROM fingerprint')
-        self.rows = self.con.fetchall()
-        print(f'db: fetched user id {id+1}, information: {self.rows[id+1]}')
-        return self.rows[id+1]
+        with sqlite3.connect(self.db_path) as db:
+            row = db.execute(
+                'SELECT id, name, fingerid, created_at FROM fingerprint WHERE id = ?',
+                (id,),
+            ).fetchone()
+        if row is None:
+            return None
+        return dict(zip(('id', 'name', 'fingerid', 'created_at'), row))
 
-    def writeInformation(self, name="None", fingerid="None"):
-        data = [
-            (name, fingerid)
-        ]
-        if name == "None" or fingerid == "None":
-            print("db: parameter 'name or 'fingerid' has not set up correctly.")
+    def writeInformation(self, name: str, fingerid: str):
+        if not name or not fingerid:
             self.status = BackendStatus.DATA_SETUP_ERROR
-        
+            raise ValueError("name and fingerid are required.")
+        with sqlite3.connect(self.db_path) as db:
+            cursor = db.execute(
+                'INSERT INTO fingerprint (name, fingerid) VALUES (?, ?)',
+                (name, fingerid),
+            )
+            return cursor.lastrowid
