@@ -121,8 +121,9 @@ class Main(QWidget):
         self.label_RoomName.adjustSize()
 
     def showError(self, error_name: str):
-        print(f"FAILED!!\nError log: "
-              +error_name+f"\n\nFINGERPRINT CODE: {self.fingerPrintStatus.name}\nBACKEND CODE: {self.backend.getStatus().name}")
+        full_log = error_name+f"\n\nFINGERPRINT CODE: {self.fingerPrintStatus.name}\nBACKEND CODE: {self.backend.getStatus().name}"
+
+        print(f"FAILED!!\nError log: {full_log}")
         self.setStyleSheet("background-color : black;")
         self.errorBg = QLabel(self)
         self.errorBg.setPixmap(QPixmap('assets/imgs/error.png'))
@@ -132,7 +133,7 @@ class Main(QWidget):
         bgY = (self.height() - self.errorBg.height()) // 2
         self.errorBg.move(bgX, bgY)
 
-        self.errorLog = QLabel(error_name+f"\n\nFINGERPRINT CODE: {self.fingerPrintStatus.name}\nBACKEND CODE: {self.backend.getStatus().name}", self) # error msg
+        self.errorLog = QLabel(full_log, self) # error msg
         self.errorLog.setStyleSheet("background-color : transparent; color : white;")
         font_error = self.errorLog.font()
         font_error.setFamily('Pretendard JP Variable')
