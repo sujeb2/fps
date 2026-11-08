@@ -37,10 +37,16 @@ class FingerPrint():
                 time.sleep(1)
             response = ser.readline()
             match response.decode('utf-8').strip():
-                case "READY":
+                case "READY": # fingerprint idle
                     self.status = FingerPrintStatus.DEVICE_IDLE
-                case "SUCCESS":
-                    finger_id = ser.readline()
+                case "SUCCESS": # fingerprint found
+                    return ser.readline()
+                case "FAILED": # fingerprint read error
+                    self.status = FingerPrintStatus.FINGERPRINT_FAILED
+                case "NOT_FOUND": # fingerprint not found
+                    self.status = FingerPrintStatus.FINGERPRINT_UNKNOWN
+                case "CAPTURED": # fingerprint capture status
+                    return response
                 case _:
                     self.status = FingerPrintStatus.DEVICE_WAIT
         except serial.SerialTimeoutException:

@@ -42,9 +42,6 @@ class Main(QWidget):
                 self.fingerPrintStatusTicker.timeout.connect(self.checkFingerprintStatus)
                 self.fingerPrintStatusTicker.start(1000)
 
-                # backend status checker
-                
-
                 # date time (label_CurrentDateTime only exists after setupWidget)
                 self.updateCurrentDateTime()
                 self.dateTimeTimer = QtCore.QTimer(self)

@@ -26,13 +26,18 @@ class MainBackend:
                 )
                 ''')
             self.status = BackendStatus.DATABASE_READY
-            print('db: loaded')
+            print(f'db: loaded, current fingerprint enroll count: {self.count()}')
         except sqlite3.Error as e:
             self.status = BackendStatus.DATABASE_GENERIC_ERROR
             print(f'{e}')
 
     def getStatus(self):
         return self.status
+
+    def count(self):
+        with sqlite3.connect(self.db_path) as db:
+            row = db.execute('SELECT COUNT(*) FROM fingerprint;').fetchall()
+            return row.count(0)
 
     def fetchInformation(self, id: int):
         with sqlite3.connect(self.db_path) as db:
