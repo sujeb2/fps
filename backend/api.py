@@ -18,7 +18,7 @@ def pingpong():
     return {"ping": "pong!"}
 
 @api.get("/id/{user_id}")
-def getUserInformation(user_id: int, request: Request):
+def getUserInformation(user_id: int, request: Request): # registered user info
     information = request.app.state.backend.fetchInformation(user_id)
     if information is None:
         raise HTTPException(status_code=404, detail="Fingerprint record not found.")
