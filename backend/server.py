@@ -1,4 +1,5 @@
 import sqlite3
+from encryption import Encryption
 from enum import Enum
 from pathlib import Path
 
@@ -21,11 +22,14 @@ class MainBackend:
                 db.execute('''CREATE TABLE IF NOT EXISTS fingerprint(
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     name TEXT NOT NULL,
+                    nametag TEXT NOT NULL,
                     fingerid TEXT NOT NULL,
+                    fingertag TEXT NOT NULL,
                     created_at TEXT DEFAULT CURRENT_TIMESTAMP
                 )
                 ''')
             self.status = BackendStatus.DATABASE_READY
+            self.encryptionEnviron = Encryption()
             print(f'db: loaded, current fingerprint enroll count: {self.count()}')
         except sqlite3.Error as e:
             self.status = BackendStatus.DATABASE_GENERIC_ERROR
@@ -42,20 +46,23 @@ class MainBackend:
     def fetchInformation(self, id: int):
         with sqlite3.connect(self.db_path) as db:
             row = db.execute(
-                'SELECT id, name, fingerid, created_at FROM fingerprint WHERE id = ?',
+                'SELECT id, name, nametag, fingerid, fingertag, reated_at FROM fingerprint WHERE id = ?',
                 (id,),
             ).fetchone()
         if row is None:
             return None
-        return dict(zip(('id', 'name', 'fingerid', 'created_at'), row))
+        return dict(zip(('id', 'name', 'nametag', 'fingerid', 'fingertag', 'created_at'), row))
 
     def writeInformation(self, name: str, fingerid: str):
         if not name or not fingerid:
             self.status = BackendStatus.DATA_SETUP_ERROR
             raise ValueError("name and fingerid are required.")
+        encrypted_name = self.encryptionEnviron.createEncryptedKey(name)
+        encrypted_fingerid = self.encryptionEnviron.createEncryptedKey(fingerid)
+        
         with sqlite3.connect(self.db_path) as db:
             cursor = db.execute(
-                'INSERT INTO fingerprint (name, fingerid) VALUES (?, ?)',
-                (name, fingerid),
+                'INSERT INTO fingerprint (name, nametag, fingerid, fingertag) VALUES (?, ?, ?, ?)',
+                (encrypted_name[0], encrypted_fingerid[0], encrypted_name[1], encrypted_fingerid[1]),
             )
             return cursor.lastrowid
