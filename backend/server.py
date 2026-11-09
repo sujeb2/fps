@@ -1,5 +1,5 @@
 import sqlite3
-from encryption import Encryption
+from backend.encryption import Encryption
 from enum import Enum
 from pathlib import Path
 
@@ -28,10 +28,10 @@ class MainBackend:
                     created_at TEXT DEFAULT CURRENT_TIMESTAMP
                 )
                 ''')
-            self.status = BackendStatus.DATABASE_READY
             self.encryptionEnviron = Encryption()
+            self.status = BackendStatus.DATABASE_READY
             print(f'db: loaded, current fingerprint enroll count: {self.count()}')
-        except sqlite3.Error as e:
+        except (sqlite3.Error, ValueError, OSError) as e:
             self.status = BackendStatus.DATABASE_GENERIC_ERROR
             print(f'{e}')
 
@@ -40,18 +40,24 @@ class MainBackend:
 
     def count(self):
         with sqlite3.connect(self.db_path) as db:
-            row = db.execute('SELECT COUNT(*) FROM fingerprint;').fetchall()
-            return row.count(0)
+            row = db.execute('SELECT COUNT(*) FROM fingerprint;').fetchone()
+            return row[0]
 
     def fetchInformation(self, id: int):
         with sqlite3.connect(self.db_path) as db:
             row = db.execute(
-                'SELECT id, name, nametag, fingerid, fingertag, reated_at FROM fingerprint WHERE id = ?',
+                'SELECT id, name, nametag, fingerid, fingertag, created_at FROM fingerprint WHERE id = ?',
                 (id,),
             ).fetchone()
         if row is None:
             return None
-        return dict(zip(('id', 'name', 'nametag', 'fingerid', 'fingertag', 'created_at'), row))
+        record_id, name, nametag, fingerid, fingertag, created_at = row
+        return {
+            'id': record_id,
+            'name': self.encryptionEnviron.decryptEncryptedKey(name, nametag).decode('utf-8'),
+            'fingerid': self.encryptionEnviron.decryptEncryptedKey(fingerid, fingertag).decode('utf-8'),
+            'created_at': created_at,
+        }
 
     def writeInformation(self, name: str, fingerid: str):
         if not name or not fingerid:
@@ -63,6 +69,6 @@ class MainBackend:
         with sqlite3.connect(self.db_path) as db:
             cursor = db.execute(
                 'INSERT INTO fingerprint (name, nametag, fingerid, fingertag) VALUES (?, ?, ?, ?)',
-                (encrypted_name[0], encrypted_fingerid[0], encrypted_name[1], encrypted_fingerid[1]),
+                (encrypted_name[0], encrypted_name[1], encrypted_fingerid[0], encrypted_fingerid[1]),
             )
             return cursor.lastrowid

@@ -1,7 +1,32 @@
 from contextlib import asynccontextmanager
-from typing import AsyncIterator
-from fastapi import FastAPI, HTTPException, Request
+import os
+import secrets
+from typing import AsyncIterator, Optional
+from fastapi import Depends, FastAPI, HTTPException, Request
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from backend.server import BackendStatus, MainBackend
+
+bearer_scheme = HTTPBearer(auto_error=False)
+
+
+def require_api_token(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(bearer_scheme),
+) -> None:
+    configured_token = os.environ.get("FPS_API_TOKEN")
+    if not configured_token:
+        raise HTTPException(
+            status_code=503,
+            detail="API authentication is not configured.",
+        )
+    if credentials is None or not secrets.compare_digest(
+        credentials.credentials, configured_token
+    ):
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid or missing bearer token.",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
@@ -17,7 +42,7 @@ api = FastAPI(title="FPSAPI", version="0.0.1", lifespan=lifespan)
 def pingpong():
     return {"ping": "pong!"}
 
-@api.get("/id/{user_id}")
+@api.get("/id/{user_id}", dependencies=[Depends(require_api_token)])
 def getUserInformation(user_id: int, request: Request): # registered user info
     information = request.app.state.backend.fetchInformation(user_id)
     if information is None:
