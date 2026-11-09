@@ -24,6 +24,7 @@ class FingerPrint():
         self.status = FingerPrintStatus.DEVICE_WAIT
         if not self.port: self.status = FingerPrintStatus.DEVICE_NOT_SETUP
         else: self.status = FingerPrintStatus.DEVICE_IDLE
+        self.ser = serial.Serial(self.port, 9600, timeout=1)
         print('module: started')
 
     def getStatus(self):
@@ -31,16 +32,15 @@ class FingerPrint():
 
     def read(self):
         try:
-            ser = serial.Serial(self.port, 9600, timeout=1)
-            if not ser.is_open:
+            if not self.ser.is_open:
                 self.status = FingerPrintStatus.DEVICE_NOT_RESPONSIVE
                 time.sleep(1)
-            response = ser.readline()
+            response = self.ser.readline()
             match response.decode('utf-8').strip():
                 case "READY": # fingerprint idle
                     self.status = FingerPrintStatus.DEVICE_IDLE
                 case "SUCCESS": # fingerprint found
-                    return ser.readline()
+                    return self.ser.readline()
                 case "FAILED": # fingerprint read error
                     self.status = FingerPrintStatus.FINGERPRINT_FAILED
                 case "NOT_FOUND": # fingerprint not found
@@ -52,3 +52,8 @@ class FingerPrint():
         except serial.SerialTimeoutException:
             self.status = FingerPrintStatus.DEVICE_NOT_RESPONSIVE
             return self.status
+
+    def closePort(self):
+        self.ser.close()
+        print('module: port closed')
+        return 0

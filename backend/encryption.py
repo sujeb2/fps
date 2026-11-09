@@ -15,9 +15,8 @@ def loadKey() -> bytes:
         key = configured.encode('utf-8')
         source = KEY_ENV_NAME
     else:
-        print('enc: key not found!! generating')
         key = loadOrCreateKeyFile()
-        print(f'enc: created key ({key})')
+        print(f'enc: found key ({key})')
         source = str(KEY_FILE)
 
     if len(key) not in AES.key_size:
@@ -28,12 +27,14 @@ def loadKey() -> bytes:
 def loadOrCreateKeyFile() -> bytes:
     try:
         descriptor = os.open(KEY_FILE, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        print('enc: key not found!! generating')
     except FileExistsError:
         return KEY_FILE.read_bytes()
 
     key = get_random_bytes(32)
     with os.fdopen(descriptor, 'wb') as file:
         file.write(key)
+        print(f'enc: generated key ({key})')
     return key
 
 
