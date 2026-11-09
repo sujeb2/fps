@@ -4,3 +4,4 @@ test/
 __pycache__
 .encryption_key
 user.db
+assets/imgs/schoollogo.png

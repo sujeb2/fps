@@ -9,12 +9,15 @@ NONCE_SIZE = 16
 
 
 def loadKey() -> bytes:
+    print("enc: start load key")
     configured = os.environ.get(KEY_ENV_NAME)
     if configured:
         key = configured.encode('utf-8')
         source = KEY_ENV_NAME
     else:
+        print('enc: key not found!! generating')
         key = loadOrCreateKeyFile()
+        print(f'enc: created key ({key})')
         source = str(KEY_FILE)
 
     if len(key) not in AES.key_size:
@@ -23,7 +26,6 @@ def loadKey() -> bytes:
 
 
 def loadOrCreateKeyFile() -> bytes:
-    # the key has to survive restarts, otherwise saved records can never be decrypted again.
     try:
         descriptor = os.open(KEY_FILE, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
     except FileExistsError:
@@ -43,7 +45,6 @@ class Encryption:
     def createEncryptedKey(self, value):
         if isinstance(value, str):
             value = value.encode('utf-8')
-        # EAX ciphers are single use, so every value gets its own cipher and nonce.
         nonce = get_random_bytes(NONCE_SIZE)
         cipher = AES.new(self.key, AES.MODE_EAX, nonce=nonce)
         ciphertext, tag = cipher.encrypt_and_digest(value)
