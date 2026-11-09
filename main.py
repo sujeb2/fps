@@ -1,4 +1,4 @@
-import configparser, sys, platform, whynotclick, argparse
+import configparser, sys, platform, argparse
 from fingerprint import FingerPrintStatus, FingerPrint
 from backend.server import BackendStatus, MainBackend
 
@@ -6,6 +6,7 @@ from PyQt6.QtWidgets import QWidget, QLabel, QApplication
 from PyQt6.QtGui import QPixmap
 from PyQt6.QtCore import QDateTime
 from PyQt6 import QtCore
+from update import Update
 
 cfg = configparser.ConfigParser()
 cfg.read(filenames='conf.ini', encoding="utf-8")
@@ -18,10 +19,13 @@ class Main(QWidget):
         print(f'Start fps-project.. PyQt Version: {QtCore.qVersion()}, isdemo: {self.isdemo}')
         super().__init__()
 
+        self.isUpdateRequired = True
+
         self.setWindowTitle("fps")
         self.setStyleSheet("background-color : white;")
         self.setFixedSize(600, 1024)
         self.lockStatusImg = [QPixmap("assets/imgs/idle.png"), QPixmap("assets/imgs/unlock.png"), QPixmap("assets/imgs/unknown.png")]
+        self.statusImg = [QPixmap("assets/imgs/action_required.png"), QPixmap("assets/imgs/update_required.png")]
         
         # fingerprint
         self.fingerPrintModule = FingerPrint()
@@ -78,6 +82,13 @@ class Main(QWidget):
         self.img_SchoolLogo = QLabel(self)
         self.img_SchoolLogo.setPixmap(QPixmap('assets/imgs/schoollogo.png'))
 
+        self.status_ActionWarn = QLabel(self)
+        if cfg["School"]["RoomRequiresEnrollment"] == "True":
+            self.status_ActionWarn.setPixmap(self.statusImg[0])
+        if self.isUpdateRequired:
+            self.status_ActionWarn.setPixmap(self.statusImg[1])
+        self.status_ActionWarn.adjustSize()
+
         # fonts
         self.font_default = self.label_SchoolName.font()
         self.font_default.setFamily('Pretendard JP Variable')
@@ -106,6 +117,7 @@ class Main(QWidget):
         self.label_RoomName.move(50, 394)
         self.label_CurrentDateTime.move(50, 336)
         self.img_LockStatus.move(266, 759)
+        self.status_ActionWarn.move(50, 505)
 
         self.label_RoomName.setFont(self.font_default)
         self.label_SchoolName.setFont(self.font_default)
