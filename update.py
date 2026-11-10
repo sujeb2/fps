@@ -1,7 +1,7 @@
-import sys, os, requests
+import requests, esptool, subprocess
 from serial import Serial
 from enum import Enum
-from fingerprint import FingerPrint
+from urllib.parse import urljoin
 
 class UpdateStatus(Enum):
     UPDATE_CHECK_DONE = 0
@@ -11,6 +11,10 @@ class UpdateStatus(Enum):
     UPDATE_DOWNLOAD_DONE = 4
     UPDATE_IDLE = 5
     MODULE_NOT_FOUND = 6
+    FIRMWARE_UPLOAD_FAILED = 7
+    FIRMWARE_FILE_VERIFY_FAILED = 8
+    FIRMWARE_WRITE_REJECTED = 9
+    GENERIC_FIRMWARE_ERROR = 10
 
 
 class Update():
@@ -25,23 +29,41 @@ class Update():
         self.fileRequestUrl = "http://fpsota.songro.kro.kr/"
         self.currentVersion = current_ver
 
-    async def checkUpdate(self):
+    def checkUpdate(self):
         headers = {"User-Agent": "FPSRequester/1.0", 'Content-Type': 'text/html; charset=utf-8'}
         if(self.versionRequestUrl == False): # invalid url
             print('update: update url is invalid or empty.')
             exit(UpdateStatus.UPDATE_URL_INVALID_OR_EMPTY.name)
 
         ver_request = requests.get(self.versionRequestUrl, headers=headers, verify=False)
+        print(f'update: requested, version got: {ver_request.content}')
 
         if(ver_request.status_code != 200): # server rejection
             print('update: failed to check update!!')
             exit(UpdateStatus.UPDATE_SERVER_REJECTED.name)
         elif ver_request.content != self.currentVersion:
             print(f'update: latest update found!! new version: {ver_request.content}, current version: {self.currentVersion}')
+            new_ver = ver_request.content
             if(self.serial != None):
                 self.serial.close()
                 print('update: port closed')
+                header = {"User-Agent": "FPSFileRequester/1.0"}
+                print('update: start downloading firmware')
+                file_request = requests.get(urljoin(self.fileRequestUrl, f"firmware-v{new_ver}.bin"), header)
+                try:
+                    with open("data/firmware-loaded/firmware-new.bin", "wb+") as f:
+                        f.write(file_request.content)
+                        print('update: download done!!')
+                    runnable = ['--port', self.firmwareUploadPort, 'write_flash', '0x1000', "firmware-new.bins"]
+                    esptool.main(runnable)
+                    print('update: update done, please restart the system')
+                except subprocess.CalledProcessError:
+                    exit(UpdateStatus.FIRMWARE_WRITE_REJECTED.name)
+                except FileNotFoundError:
+                    exit(UpdateStatus.FIRMWARE_FILE_VERIFY_FAILED.name)
+                except Exception:
+                    exit(UpdateStatus.GENERIC_FIRMWARE_ERROR.name)
             else:
                 exit(UpdateStatus.MODULE_NOT_FOUND.name)
         else:
-            print(f'update: no update available.')
+            print('update: no update available.')
