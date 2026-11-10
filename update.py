@@ -28,6 +28,8 @@ class Update():
         self.versionRequestUrl = "http://fpsversion.songro.kro.kr/"
         self.fileRequestUrl = "http://fpsota.songro.kro.kr/"
         self.currentVersion = current_ver
+        self.isUpdateRequired = False
+        self.newVersion = ''
 
     def checkUpdate(self):
         headers = {"User-Agent": "FPSRequester/1.0", 'Content-Type': 'text/html; charset=utf-8'}
@@ -37,19 +39,33 @@ class Update():
 
         ver_request = requests.get(self.versionRequestUrl, headers=headers, verify=False)
         print(f'update: requested, version got: {ver_request.content}')
-
         if(ver_request.status_code != 200): # server rejection
             print('update: failed to check update!!')
             exit(UpdateStatus.UPDATE_SERVER_REJECTED.name)
         elif ver_request.content != self.currentVersion:
             print(f'update: latest update found!! new version: {ver_request.content}, current version: {self.currentVersion}')
-            new_ver = ver_request.content
+            self.isUpdateRequired = True
+            self.newVersion = ver_request.content
+        else:
+            self.isUpdateRequired = False
+            self.newVersion = self.currentVersion
+
+    def startUpdate(self):
+        headers = {"User-Agent": "FPSRequester/1.0", 'Content-Type': 'text/html; charset=utf-8'}
+        if(self.versionRequestUrl == False): # invalid url
+            print('update: update url is invalid or empty.')
+            exit(UpdateStatus.UPDATE_URL_INVALID_OR_EMPTY.name)
+
+        ver_request = requests.get(self.versionRequestUrl, headers=headers, verify=False)
+        print(f'update: requested, version got: {ver_request.content}')
+
+        if self.isUpdateRequired: 
             if(self.serial != None):
                 self.serial.close()
                 print('update: port closed')
                 header = {"User-Agent": "FPSFileRequester/1.0"}
                 print('update: start downloading firmware')
-                file_request = requests.get(urljoin(self.fileRequestUrl, f"firmware-v{new_ver}.bin"), header)
+                file_request = requests.get(urljoin(self.fileRequestUrl, f"firmware-v{self.newVersion}.bin"), header)
                 try:
                     with open("data/firmware-loaded/firmware-new.bin", "wb+") as f:
                         f.write(file_request.content)
@@ -65,5 +81,4 @@ class Update():
                     exit(UpdateStatus.GENERIC_FIRMWARE_ERROR.name)
             else:
                 exit(UpdateStatus.MODULE_NOT_FOUND.name)
-        else:
-            print('update: no update available.')
+        else: print('update: cannot find any other new updates available.')

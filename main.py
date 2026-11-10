@@ -19,7 +19,7 @@ class Main(QWidget):
         print(f'Start fps-project.. PyQt Version: {QtCore.qVersion()}, isdemo: {self.isdemo}')
         super().__init__()
 
-        self.isUpdateRequired = Update(cfg["Fingerprint"]["Port"], cfg["Generic"]["Version"])
+        self.isUpdateRequired = Update(cfg["Fingerprint"]["Port"], cfg["Generic"]["Version"]).checkUpdate()
 
         self.setWindowTitle("fps")
         self.setStyleSheet("background-color : white;")
