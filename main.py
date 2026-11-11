@@ -142,7 +142,8 @@ class Main(QWidget):
                 self.dateTimeTimer.stop()
                 self.label_CurrentDateTime.setText(f"안녕하세요, {usr_name}님.")
                 self.fingerStatus.setText("확인 되었습니다.")
-                self.fingerSTatus.setStyleSheet(COLOR_SUCCESS)
+                self.fingerStatus.setStyleSheet(COLOR_SUCCESS)
+                self.fingerPrintStatus.adjustSize()
                 self.img_LockStatus.setPixmap(self.lockStatusImg[1])
                 await asyncio.sleep(cfg["Generic"]["FingerprintStatusUpdateTime"])
                 self.dateTimeTimer.start(1000)
@@ -152,6 +153,7 @@ class Main(QWidget):
                 self.img_LockStatus.setPixmap(self.lockStatusImg[2])
                 self.fingerStatus.setText("알 수 없는 지문입니다.")
                 self.fingerPrintStatus.setStyleSheet(COLOR_FAILED)
+                self.fingerPrintStatus.adjustSize()
                 await asyncio.sleep(cfg["Generic"]["FingerprintStatusUpdateTime"])
 
     def showError(self, error_name: str):
