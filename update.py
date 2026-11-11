@@ -70,7 +70,7 @@ class Update():
                     with open("data/firmware-loaded/firmware-new.bin", "wb+") as f:
                         f.write(file_request.content)
                         print('update: download done!!')
-                    runnable = ['--port', self.firmwareUploadPort, 'write_flash', '0x1000', "firmware-new.bins"]
+                    runnable = ['--port', self.firmwareUploadPort, 'write_flash', '0x1000', "firmware-new.bin"]
                     esptool.main(runnable)
                     print('update: update done, please restart the system')
                 except subprocess.CalledProcessError:

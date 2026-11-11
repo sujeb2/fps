@@ -19,7 +19,10 @@ class Main(QWidget):
         print(f'Start fps-project.. PyQt Version: {QtCore.qVersion()}, isdemo: {self.isdemo}')
         super().__init__()
 
-        self.isUpdateRequired = Update(cfg["Fingerprint"]["Port"], cfg["Generic"]["Version"]).checkUpdate()
+        # check only: never raises, so the app still starts offline. Flashing runs from `python update.py` with the app stopped.
+        self.updater = Update(cfg["Fingerprint"]["Port"], cfg["Generic"]["Version"])
+        self.updater.checkUpdate()
+        self.isUpdateRequired = self.updater.isUpdateRequired
 
         self.setWindowTitle("fps")
         self.setStyleSheet("background-color : white;")
