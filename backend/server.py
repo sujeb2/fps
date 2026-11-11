@@ -59,6 +59,20 @@ class MainBackend:
             'created_at': created_at,
         }
 
+    def isItemExist(self, id: int):
+        if not id:
+            self.status = BackendStatus.DATA_SETUP_ERROR
+            raise ValueError("id parameter is required to gather the data.")
+        try:
+            with sqlite.connect(self.db_path) as db:
+                row = db.execute('SELECT id FROM fingerprint').fetchone()
+            if not row:
+                return False
+            else:
+                return True
+        except:
+            self.status = BackendStatus
+
     def writeInformation(self, name: str, fingerid: str):
         if not name or not fingerid:
             self.status = BackendStatus.DATA_SETUP_ERROR

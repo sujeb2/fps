@@ -1,4 +1,4 @@
-import configparser, sys, platform, argparse
+import configparser, sys, platform, argparse, asyncio
 from fingerprint import FingerPrintStatus, FingerPrint
 from backend.server import BackendStatus, MainBackend
 
@@ -12,6 +12,8 @@ cfg = configparser.ConfigParser()
 cfg.read(filenames='conf.ini', encoding="utf-8")
 COLOR_MAIN = f'background-color : white; Color : {cfg["School"]["MainColor"]};'
 COLOR_SUB = f'background-color : white; Color : {cfg["School"]["SubColor"]};'
+COLOR_FAILED = f'background-color : white; Color : #ff3f2e;'
+COLOR_SUCCESS = f'background-color : white; Color : #9dff73;'
 
 class Main(QWidget):
     def __init__(self, isdemo):
@@ -132,6 +134,26 @@ class Main(QWidget):
         self.label_SchoolName.adjustSize()
         self.label_RoomName.adjustSize()
 
+    async def scanUpdateUISetup(self, status: FingerPrintStatus): # fingerprint status update
+        if not status:
+            raise ValueError("Invalid User name parameter.")
+        match status:
+            case FingerPrintStatus.SCAN_SUCCESS: # fingerprint success
+                self.dateTimeTimer.stop()
+                self.label_CurrentDateTime.setText(f"안녕하세요, {usr_name}님.")
+                self.fingerStatus.setText("확인 되었습니다.")
+                self.fingerSTatus.setStyleSheet(COLOR_SUCCESS)
+                self.img_LockStatus.setPixmap(self.lockStatusImg[1])
+                await asyncio.sleep(cfg["Generic"]["FingerprintStatusUpdateTime"])
+                self.dateTimeTimer.start(1000)
+            case FingerPrintStatus.FINGERPRINT_ENROLLMENT:
+
+            case _: # any other status update
+                self.img_LockStatus.setPixmap(self.lockStatusImg[2])
+                self.fingerStatus.setText("알 수 없는 지문입니다.")
+                self.fingerPrintStatus.setStyleSheet(COLOR_FAILED)
+                await asyncio.sleep(cfg["Generic"]["FingerprintStatusUpdateTime"])
+
     def showError(self, error_name: str):
         full_log = error_name+f"\n\nFINGERPRINT CODE: {self.fingerPrintStatus.name}\nBACKEND CODE: {self.backend.getStatus().name}"
 
@@ -168,7 +190,7 @@ class Main(QWidget):
             case FingerPrintStatus.DEVICE_NOT_SETUP:
                 self.showError(f"모듈이 정상적으로 인식이 되지 않습니다.\n유지보수 판을 열어 모듈의 연결선이 정상적으로 연결이 되어있는지 확인해주십시오.")
             case _:
-                pass
+                asyncio.run(self.scanUpdateUISetup(self.status))
 
 if __name__ == '__main__':
     parse = argparse.ArgumentParser()

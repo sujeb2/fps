@@ -12,6 +12,7 @@ class FingerPrintStatus(Enum):
 
     FINGERPRINT_FAILED = 3 # register fail
     FINGERPRINT_UNKNOWN = 4 # not found
+    FINGERPRINT_ENROLLMENT = 7 # fingerprint enrollment (register)
 
     SCAN_FAILURE = 5 # didn't captured
     SCAN_SUCCESS = 6

@@ -48,3 +48,10 @@ def getUserInformation(user_id: int, request: Request): # registered user info
     if information is None:
         raise HTTPException(status_code=404, detail="Fingerprint record not found.")
     return information
+
+@api.get("/checkline/userExists/{user_id}", dependencies=[Depends(require_api_token)])
+def checkUserExist(user_id: int, request: Request):
+    info = request.app.state.backend.isExist(user_id)
+    if info is False:
+        raise HTTPException(status_code=404, detail="Imported user id has not found or not enrolled correctly.")
+    return info
