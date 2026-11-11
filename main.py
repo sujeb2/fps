@@ -29,7 +29,7 @@ class Main(QWidget):
         self.setWindowTitle("fps")
         self.setStyleSheet("background-color : white;")
         self.setFixedSize(600, 1024)
-        self.lockStatusImg = [QPixmap("assets/imgs/idle.png"), QPixmap("assets/imgs/unlock.png"), QPixmap("assets/imgs/unknown.png")]
+        self.lockStatusImg = [QPixmap("assets/imgs/idle.png"), QPixmap("assets/imgs/unlock.png"), QPixmap("assets/imgs/unknown.png"), QPixmap("assets/imgs/fingerprint.png")]
         self.statusImg = [QPixmap("assets/imgs/action_required.png"), QPixmap("assets/imgs/update_required.png")]
         
         # fingerprint
@@ -147,7 +147,7 @@ class Main(QWidget):
                 await asyncio.sleep(cfg["Generic"]["FingerprintStatusUpdateTime"])
                 self.dateTimeTimer.start(1000)
             case FingerPrintStatus.FINGERPRINT_ENROLLMENT:
-
+                pass # todo: add ENROLLMENT status update feature here.
             case _: # any other status update
                 self.img_LockStatus.setPixmap(self.lockStatusImg[2])
                 self.fingerStatus.setText("알 수 없는 지문입니다.")
