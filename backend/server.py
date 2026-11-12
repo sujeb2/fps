@@ -64,7 +64,7 @@ class MainBackend:
             self.status = BackendStatus.DATA_SETUP_ERROR
             raise ValueError("id parameter is required to gather the data.")
         try:
-            with sqlite.connect(self.db_path) as db:
+            with sqlite3.connect(self.db_path) as db:
                 row = db.execute('SELECT id FROM fingerprint').fetchone()
             if not row:
                 return False
