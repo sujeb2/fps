@@ -25,6 +25,8 @@ class FingerPrint():
         self.status = FingerPrintStatus.DEVICE_WAIT
         if not self.port: self.status = FingerPrintStatus.DEVICE_NOT_SETUP
         else: self.status = FingerPrintStatus.DEVICE_IDLE
+        self.isdemo = isdemo
+        self.ser = None # no serial in demo mode
         if not isdemo:
             self.ser = serial.Serial(self.port, 9600, timeout=1)
         print('module: started')
@@ -54,6 +56,23 @@ class FingerPrint():
         except serial.SerialTimeoutException:
             self.status = FingerPrintStatus.DEVICE_NOT_RESPONSIVE
             return self.status
+
+    def write(self, data: str): # send command to esp32
+        if self.isdemo:
+            print(f'module: (demo) would send "{data}"')
+            return True
+        if self.ser is None or not self.ser.is_open:
+            print(f'module: cannot send "{data}", port is not opened')
+            return False
+        try:
+            self.ser.write(f'{data}\n'.encode('utf-8')) # esp32 reads until newline
+            self.ser.flush()
+            print(f'module: sent "{data}"')
+            return True
+        except serial.SerialException as e:
+            self.status = FingerPrintStatus.DEVICE_NOT_RESPONSIVE
+            print(f'module: failed to send "{data}" ({e})')
+            return False
 
     def closePort(self):
         self.ser.close()

@@ -1,8 +1,8 @@
-import configparser, sys, platform, argparse, asyncio
+import configparser, sys, platform, argparse, asyncio, whynotclick
 from fontTools.ttLib import TTFont
-from whynotclick import clickable
 from fingerprint import FingerPrintStatus, FingerPrint
-from backend.server import BackendStatus, MainBackend
+from backend.server import BackendStatus, MainBackend, QRSessionStatus
+from qrgenerator import QRCode
 
 from PyQt6.QtWidgets import QWidget, QLabel, QApplication
 from PyQt6.QtGui import QPixmap
@@ -16,6 +16,7 @@ COLOR_MAIN = f'background-color : white; Color : {cfg["School"]["MainColor"]};'
 COLOR_SUB = f'background-color : white; Color : {cfg["School"]["SubColor"]};'
 COLOR_FAILED = f'background-color : white; Color : #ff3f2e;'
 COLOR_SUCCESS = f'background-color : white; Color : #9dff73;'
+QRCODE_SIZE = 150 # fits between status warning and finger status text
 
 class Main(QWidget):
     def __init__(self, isdemo):
@@ -41,6 +42,11 @@ class Main(QWidget):
         # fingerprint
         self.fingerPrintModule = FingerPrint(self.isdemo)
         self.fingerPrintStatus = self.fingerPrintModule.getStatus()
+
+        # qrcode
+        self.qrcode = QRCode()
+        self.qrToken = None # current qrcode session, None when not in use
+        self.qrImagePath = None
 
         # server
         self.backend = MainBackend()
@@ -83,8 +89,11 @@ class Main(QWidget):
         # default status
         self.label_SchoolName = QLabel(schoolName ,self)
         self.label_RoomName = QLabel(roomName, self)
+        #self.label_versionInfo = QLabel(cfg["Generic"]["Version"], self)
         self.fingerStatus = QLabel("지문을 기다리는 중..", self)
         self.label_CurrentDateTime = QLabel(self)
+        self.btn_QRcodeGeneration = whynotclick.Label(self)
+        self.btn_QRcodeGeneration.setText("아니면 QR코드 인식하기")
 
         # images
         self.img_LockStatus = QLabel(self)
@@ -92,6 +101,9 @@ class Main(QWidget):
 
         self.img_SchoolLogo = QLabel(self)
         self.img_SchoolLogo.setPixmap(QPixmap('assets/imgs/schoollogo.png'))
+
+        self.img_TemporaryQRCode = QLabel(self)
+        self.img_TemporaryQRCode.hide()
 
         self.status_ActionWarn = QLabel(self)
         if cfg["School"]["RoomRequiresEnrollment"] == "True":
@@ -121,6 +133,7 @@ class Main(QWidget):
         self.label_RoomName.setStyleSheet(COLOR_MAIN)
         self.label_CurrentDateTime.setStyleSheet(COLOR_SUB)
         self.fingerStatus.setStyleSheet(COLOR_MAIN)
+        self.btn_QRcodeGeneration.setStyleSheet(COLOR_SUB)
 
         self.img_SchoolLogo.resize(116, 116)
         self.img_SchoolLogo.move(50, 45)
@@ -129,16 +142,111 @@ class Main(QWidget):
         self.label_CurrentDateTime.move(50, 336)
         self.img_LockStatus.move(266, 759)
         self.status_ActionWarn.move(50, 505)
+        self.btn_QRcodeGeneration.move(137, 946)
+
+        # qrcode goes to the same spot as lock status image
+        lockCenter = QtCore.QRect(self.img_LockStatus.pos(), self.lockStatusImg[0].size()).center()
+        self.img_TemporaryQRCode.setGeometry(lockCenter.x() - QRCODE_SIZE // 2, lockCenter.y() - QRCODE_SIZE // 2, QRCODE_SIZE, QRCODE_SIZE)
 
         self.label_RoomName.setFont(self.font_default)
         self.label_SchoolName.setFont(self.font_default)
         self.fingerStatus.setFont(self.font_sub)
         self.label_CurrentDateTime.setFont(self.font_date)
+        self.btn_QRcodeGeneration.setFont(self.font_sub)
 
         self.fingerStatus.setGeometry(0, 879, 600, 77) # centerize or smth
         self.fingerStatus.setAlignment(QtCore.Qt.AlignmentFlag.AlignHCenter)
         self.label_SchoolName.adjustSize()
         self.label_RoomName.adjustSize()
+
+        self.btn_QRcodeGeneration.clicked.connect(self.genQRCode)
+
+        # qrcode session checker (started when qrcode is shown)
+        self.qrStatusTicker = QtCore.QTimer(self)
+        self.qrStatusTicker.timeout.connect(self.checkQRSession)
+
+    def genQRCode(self):
+        if self.qrToken: # second click cancels
+            self.backend.cancelQRSession(self.qrToken)
+            self.resetQRCodeUI()
+            return
+        serverUrl = cfg["QRCode"]["ServerURL"].rstrip('/')
+        if not serverUrl:
+            self.fingerStatus.setText("QR코드 서버가 설정되지 않았습니다.")
+            self.fingerStatus.setStyleSheet(COLOR_FAILED)
+            return
+
+        self.qrToken = self.backend.createQRSession(float(cfg["QRCode"]["ExpireTime"]))
+        self.qrImagePath = self.qrcode.generate(f'{serverUrl}/qr/{self.qrToken}', self.qrToken)
+        self.img_TemporaryQRCode.setPixmap(QPixmap(self.qrImagePath).scaled(
+            QRCODE_SIZE, QRCODE_SIZE,
+            QtCore.Qt.AspectRatioMode.KeepAspectRatio,
+            QtCore.Qt.TransformationMode.FastTransformation, # keep qrcode edges sharp
+        ))
+        self.img_LockStatus.hide()
+        self.img_TemporaryQRCode.show()
+
+        self.fingerStatus.setText("휴대폰으로 QR코드를 스캔해주세요.")
+        self.fingerStatus.setStyleSheet(COLOR_MAIN)
+        self.btn_QRcodeGeneration.setText("QR코드 인증 취소하기")
+        self.btn_QRcodeGeneration.adjustSize()
+        self.qrStatusTicker.start(1000)
+
+    def checkQRSession(self):
+        session = self.backend.getQRSession(self.qrToken)
+        status = session['status'] if session else QRSessionStatus.QR_EXPIRED
+        match status:
+            case QRSessionStatus.QR_WAIT: # waiting for student card
+                pass
+            case QRSessionStatus.QR_CARD_READ: # waiting for approval on phone
+                self.fingerStatus.setText("휴대폰에서 승인해주세요.")
+            case QRSessionStatus.QR_APPROVED:
+                if self.backend.useQRSession(self.qrToken): # only unlock once
+                    self.qrStatusTicker.stop()
+                    information = self.backend.fetchInformation(session['user_id'])
+                    isSent = self.fingerPrintModule.write(cfg["QRCode"]["UnlockCommand"])
+                    self.qrUpdateUISetup(isSent, information['name'] if information else '')
+            case _: # rejected or expired
+                self.qrStatusTicker.stop()
+                self.qrUpdateUISetup(False, None)
+
+    def qrUpdateUISetup(self, isSuccess: bool, name: str | None): # qrcode status update
+        self.img_TemporaryQRCode.hide()
+        self.img_LockStatus.show()
+        if isSuccess:
+            self.dateTimeTimer.stop()
+            self.label_CurrentDateTime.setText(f"안녕하세요, {name}님.")
+            self.label_CurrentDateTime.adjustSize()
+            self.fingerStatus.setText("확인 되었습니다.")
+            self.fingerStatus.setStyleSheet(COLOR_SUCCESS)
+            self.img_LockStatus.setPixmap(self.lockStatusImg[1])
+        else:
+            self.fingerStatus.setText("QR코드 인증에 실패했습니다." if name is None else "문을 열지 못했습니다.")
+            self.fingerStatus.setStyleSheet(COLOR_FAILED)
+            self.img_LockStatus.setPixmap(self.lockStatusImg[2])
+        # non blocking wait, back to idle
+        QtCore.QTimer.singleShot(int(float(cfg["Generic"]["FingerprintStatusUpdateTime"]) * 1000), self.resetQRCodeUI)
+
+    def resetQRCodeUI(self):
+        if self.qrToken is None:
+            return
+        self.qrStatusTicker.stop()
+        if self.qrImagePath:
+            self.qrcode.remove(self.qrImagePath)
+        self.qrToken = None
+        self.qrImagePath = None
+
+        self.img_TemporaryQRCode.hide()
+        self.img_TemporaryQRCode.clear()
+        self.img_LockStatus.setPixmap(self.lockStatusImg[0])
+        self.img_LockStatus.show()
+        self.fingerStatus.setText("지문을 기다리는 중..")
+        self.fingerStatus.setStyleSheet(COLOR_MAIN)
+        self.btn_QRcodeGeneration.setText("아니면 QR코드 인식하기")
+        self.btn_QRcodeGeneration.adjustSize()
+        self.updateCurrentDateTime()
+        if not self.dateTimeTimer.isActive():
+            self.dateTimeTimer.start(1000)
 
     async def scanUpdateUISetup(self, status: FingerPrintStatus): # fingerprint status update
         if not status:
@@ -191,6 +299,8 @@ class Main(QWidget):
         self.label_CurrentDateTime.adjustSize()
 
     def checkFingerprintStatus(self):
+        if self.qrToken: # qrcode authentication in progress
+            return
         self.status = self.fingerPrintModule.getStatus()
         match self.status:
             case FingerPrintStatus.DEVICE_NOT_RESPONSIVE:

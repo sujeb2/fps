@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>QR 인증</title>
+<style>
+  :root { --main: %%COLOR%%; }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 24px 16px; font-family: -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif; background: #fff; color: var(--main); text-align: center; }
+  h1 { font-size: 24px; margin: 8px 0 4px; }
+  p { font-size: 17px; line-height: 1.5; margin: 16px 0; }
+  .sub { opacity: .7; font-size: 15px; }
+  .btn { display: block; width: 100%; max-width: 360px; margin: 16px auto; padding: 16px; border: 0; border-radius: 12px; background: var(--main); color: #fff; font-size: 18px; font-weight: 700; cursor: pointer; }
+  .btn[hidden], input[hidden] { display: none; }
+  .btn.ghost { background: transparent; color: var(--main); border: 2px solid var(--main); }
+  .error { color: #d62d20; }
+  .name { font-size: 28px; font-weight: 800; }
+</style>
+</head>
+<body data-state="%%STATE%%">
+  <h1>%%SCHOOL%%</h1>
+  <p class="sub">학생증 QR 인증</p>
+  <p id="msg">%%MESSAGE%%</p>
+  <input id="card" type="file" accept="image/*" capture="environment" hidden>
+  <label for="card" id="pick" class="btn" hidden>학생증 사진 찍기</label>
+  <button id="approve" class="btn" hidden>승인</button>
+  <label for="card" id="retry" class="btn ghost" hidden>다시 찍기</label>
+<script>
+const msg = document.getElementById('msg');
+const pick = document.getElementById('pick');
+const approve = document.getElementById('approve');
+const retry = document.getElementById('retry');
+const card = document.getElementById('card');
+const base = location.pathname.replace(/\/$/, '');
+
+function show(text, isError) { msg.textContent = text; msg.className = isError ? 'error' : ''; }
+function buttons(p, a, r) { pick.hidden = !p; approve.hidden = !a; retry.hidden = !r; }
+
+if (document.body.dataset.state === 'ready') buttons(true, false, false);
+
+async function shrink(file) { // phone photos are big, send a smaller jpeg
+  try {
+    const bitmap = await createImageBitmap(file);
+    const scale = Math.min(1, 1280 / Math.max(bitmap.width, bitmap.height));
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(bitmap.width * scale);
+    canvas.height = Math.round(bitmap.height * scale);
+    canvas.getContext('2d').drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+    return await new Promise(ok => canvas.toBlob(blob => ok(blob || file), 'image/jpeg', 0.9));
+  } catch (e) { return file; }
+}
+
+card.addEventListener('change', async () => {
+  if (!card.files.length) return;
+  buttons(false, false, false);
+  show('학생증을 확인하는 중입니다..');
+  const form = new FormData();
+  form.append('card', await shrink(card.files[0]), 'card.jpg');
+  card.value = '';
+  // elapsed time so it does not look frozen, give up after 90s
+  const started = Date.now();
+  const ticker = setInterval(() => show(`학생증을 확인하는 중입니다.. (${Math.round((Date.now() - started) / 1000)}초)`), 1000);
+  const abort = new AbortController();
+  const timeout = setTimeout(() => abort.abort(), 90000);
+  try {
+    const res = await fetch(base + '/card', { method: 'POST', body: form, signal: abort.signal });
+    const data = await res.json().catch(() => ({}));
+    clearInterval(ticker);
+    if (res.ok) {
+      msg.className = '';
+      msg.replaceChildren();
+      const name = document.createElement('div');
+      name.className = 'name';
+      name.textContent = data.name;
+      msg.append(name, document.createTextNode('본인의 학생증이 맞으면 승인을 눌러주세요.'));
+      buttons(false, true, true);
+    } else {
+      show(data.detail || '학생증을 확인하지 못했습니다.', true);
+      buttons(false, false, res.status === 404 || res.status === 422);
+    }
+  } catch (e) {
+    clearInterval(ticker);
+    show(e.name === 'AbortError' ? '확인 시간이 너무 오래 걸립니다. 다시 시도해주세요.' : '서버에 연결하지 못했습니다. 다시 시도해주세요.', true);
+    buttons(false, false, true);
+  } finally {
+    clearTimeout(timeout);
+  }
+});
+
+approve.addEventListener('click', async () => {
+  buttons(false, false, false);
+  try {
+    const res = await fetch(base + '/approve', { method: 'POST' });
+    const data = await res.json();
+    if (res.ok) show('승인되었습니다. 문이 열립니다.');
+    else show(data.detail || '승인하지 못했습니다.', true);
+  } catch (e) {
+    show('서버에 연결하지 못했습니다. 다시 시도해주세요.', true);
+    buttons(false, true, true);
+  }
+});
+</script>
+</body>
+</html>
