@@ -43,16 +43,17 @@ class Update():
             exit(UpdateStatus.UPDATE_URL_INVALID_OR_EMPTY.name)
 
         ver_request = requests.get(self.versionRequestUrl, headers=headers, verify=False)
-        print(f'update: requested, version got: {ver_request.content}')
-        #got_ver = str.strip(ver_request.content)
+        got_ver = ver_request.text.strip() # .content is bytes, .text is str
+        print(f'update: requested, version got: {got_ver}')
         if(ver_request.status_code != 200): # server rejection
             print('update: failed to check update!!')
             exit(UpdateStatus.UPDATE_SERVER_REJECTED.name)
-        elif ver_request.content != self.currentVersion:
-            print(f'update: latest update found!! new version: {ver_request.content}, current version: {self.currentVersion}')
+        elif got_ver != self.currentVersion:
+            print(f'update: latest update found!! new version: {got_ver}, current version: {self.currentVersion}')
             self.isUpdateRequired = True
-            self.newVersion = ver_request.content
+            self.newVersion = got_ver
         else:
+            print(f'update: no update found')
             self.isUpdateRequired = False
             self.newVersion = self.currentVersion
 
