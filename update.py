@@ -22,14 +22,19 @@ class Update():
         super().__init__()
         print('update: start checking update')
         self.firmwareUploadPort = port
-        if(self.firmwareUploadPort != ''):
-            self.serial = Serial(port=self.firmwareUploadPort, baudrate=9600)
-        else: self.serial = None
         self.versionRequestUrl = "http://fpsversion.songro.kro.kr/"
         self.fileRequestUrl = "http://fpsota.songro.kro.kr/"
         self.currentVersion = current_ver
         self.isUpdateRequired = False
         self.newVersion = ''
+        if(self.firmwareUploadPort != ''):
+            try:
+                self.serial = Serial(port=str(self.firmwareUploadPort), baudrate=9600)
+                self.checkUpdate()
+            except:
+                print(f'update: cannot find port named {port}, only checking update..')
+                self.checkUpdate()
+        else: self.serial = None
 
     def checkUpdate(self):
         headers = {"User-Agent": "FPSRequester/1.0", 'Content-Type': 'text/html; charset=utf-8'}
@@ -39,6 +44,7 @@ class Update():
 
         ver_request = requests.get(self.versionRequestUrl, headers=headers, verify=False)
         print(f'update: requested, version got: {ver_request.content}')
+        #got_ver = str.strip(ver_request.content)
         if(ver_request.status_code != 200): # server rejection
             print('update: failed to check update!!')
             exit(UpdateStatus.UPDATE_SERVER_REJECTED.name)

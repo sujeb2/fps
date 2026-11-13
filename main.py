@@ -1,4 +1,6 @@
 import configparser, sys, platform, argparse, asyncio
+from fontTools.ttLib import TTFont
+from whynotclick import clickable
 from fingerprint import FingerPrintStatus, FingerPrint
 from backend.server import BackendStatus, MainBackend
 
@@ -20,10 +22,14 @@ class Main(QWidget):
         self.isdemo = isdemo
         print(f'Start fps-project.. PyQt Version: {QtCore.qVersion()}, isdemo: {self.isdemo}')
         super().__init__()
-
+        
+        print('font: start checking font installation')
+        try:
+            font = TTFont('src\\font\\wanted.ttf')
+        except FileNotFoundError:
+            print('font: failed to find font file!!')
         # check only: never raises, so the app still starts offline. Flashing runs from `python update.py` with the app stopped.
         self.updater = Update(cfg["Fingerprint"]["Port"], cfg["Generic"]["Version"])
-        self.updater.checkUpdate()
         self.isUpdateRequired = self.updater.isUpdateRequired
 
         self.setWindowTitle("fps")
@@ -33,7 +39,7 @@ class Main(QWidget):
         self.statusImg = [QPixmap("assets/imgs/action_required.png"), QPixmap("assets/imgs/update_required.png")]
         
         # fingerprint
-        self.fingerPrintModule = FingerPrint()
+        self.fingerPrintModule = FingerPrint(self.isdemo)
         self.fingerPrintStatus = self.fingerPrintModule.getStatus()
 
         # server
@@ -97,17 +103,17 @@ class Main(QWidget):
         # fonts
         self.font_default = self.label_SchoolName.font()
         self.font_default.setFamily('Pretendard JP Variable')
-        self.font_default.setPointSize(64)
+        self.font_default.setPointSize(60)
         self.font_default.setBold(True)
 
         self.font_sub = self.label_SchoolName.font()
         self.font_sub.setFamily('Pretendard JP Variable')
-        self.font_sub.setPointSize(24)
+        self.font_sub.setPointSize(22)
         self.font_sub.setBold(True)
 
         self.font_date = self.label_SchoolName.font()
         self.font_date.setFamily('Pretendard JP Variable')
-        self.font_date.setPointSize(36)
+        self.font_date.setPointSize(30)
         self.font_date.setBold(True)
 
         # text color setup

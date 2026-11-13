@@ -18,14 +18,15 @@ class FingerPrintStatus(Enum):
     SCAN_SUCCESS = 6
 
 class FingerPrint():
-    def __init__(self):
+    def __init__(self, isdemo):
         super().__init__()
         print('module: startup')
         self.port = cfg["Fingerprint"]["Port"]
         self.status = FingerPrintStatus.DEVICE_WAIT
         if not self.port: self.status = FingerPrintStatus.DEVICE_NOT_SETUP
         else: self.status = FingerPrintStatus.DEVICE_IDLE
-        self.ser = serial.Serial(self.port, 9600, timeout=1)
+        if not isdemo:
+            self.ser = serial.Serial(self.port, 9600, timeout=1)
         print('module: started')
 
     def getStatus(self):

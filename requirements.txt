@@ -3,3 +3,4 @@ pyserial
 fastapi[standard]
 pycryptodome
 esptool
+fonttools
