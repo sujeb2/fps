@@ -16,6 +16,7 @@ class FingerPrintStatus(Enum):
 
     SCAN_FAILURE = 5 # didn't captured
     SCAN_SUCCESS = 6
+    DEBUG_MODE = 8 # dev mdoe
 
 class FingerPrint():
     def __init__(self, isdemo):
@@ -36,9 +37,10 @@ class FingerPrint():
 
     def read(self):
         try:
-            if not self.ser.is_open:
+            if self.ser is None or not self.ser.is_open:
                 self.status = FingerPrintStatus.DEVICE_NOT_RESPONSIVE
                 time.sleep(1)
+                return self.status
             response = self.ser.readline()
             match response.decode('utf-8').strip():
                 case "READY": # fingerprint idle
@@ -51,6 +53,10 @@ class FingerPrint():
                     self.status = FingerPrintStatus.FINGERPRINT_UNKNOWN
                 case "CAPTURED": # fingerprint capture status
                     return response
+                case "ENROLLMENT_STARTED":
+                    self.status = FingerPrintStatus.FINGERPRINT_ENROLLMENT
+                case "DEBUGMODE":
+                    self.status = FingerPrintStatus.DEBUG_MODE
                 case _:
                     self.status = FingerPrintStatus.DEVICE_WAIT
         except serial.SerialTimeoutException:

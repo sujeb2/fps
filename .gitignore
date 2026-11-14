@@ -8,3 +8,4 @@ user.db
 assets/imgs/schoollogo.png
 ota-update/release_firmware.py
 assets/temp_qrcode/
+.vscode

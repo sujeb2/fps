@@ -92,6 +92,8 @@ class Main(QWidget):
         #self.label_versionInfo = QLabel(cfg["Generic"]["Version"], self)
         self.fingerStatus = QLabel("지문을 기다리는 중..", self)
         self.label_CurrentDateTime = QLabel(self)
+        self.label_subTitleText = QLabel(self)
+
         self.btn_QRcodeGeneration = whynotclick.Label(self)
         self.btn_QRcodeGeneration.setText("아니면 QR코드 인식하기")
 
@@ -128,12 +130,18 @@ class Main(QWidget):
         self.font_date.setPointSize(30)
         self.font_date.setBold(True)
 
+        self.font_smalltip = self.label_subTitleText.font()
+        self.font_smalltip.setFamily('Pretendard JP Variable')
+        self.font_smalltip.setPointSize(15)
+        self.font_smalltip.setBold(True)
+
         # text color setup
         self.label_SchoolName.setStyleSheet(COLOR_MAIN)
         self.label_RoomName.setStyleSheet(COLOR_MAIN)
         self.label_CurrentDateTime.setStyleSheet(COLOR_SUB)
         self.fingerStatus.setStyleSheet(COLOR_MAIN)
         self.btn_QRcodeGeneration.setStyleSheet(COLOR_SUB)
+        self.label_subTitleText.setStatusTip(COLOR_SUB)
 
         self.img_SchoolLogo.resize(116, 116)
         self.img_SchoolLogo.move(50, 45)
@@ -143,6 +151,7 @@ class Main(QWidget):
         self.img_LockStatus.move(266, 759)
         self.status_ActionWarn.move(50, 505)
         self.btn_QRcodeGeneration.move(137, 946)
+        self.label_subTitleText.move(50, 483)
 
         # qrcode goes to the same spot as lock status image
         lockCenter = QtCore.QRect(self.img_LockStatus.pos(), self.lockStatusImg[0].size()).center()
@@ -153,6 +162,7 @@ class Main(QWidget):
         self.fingerStatus.setFont(self.font_sub)
         self.label_CurrentDateTime.setFont(self.font_date)
         self.btn_QRcodeGeneration.setFont(self.font_sub)
+        self.label_subTitleText.setFont(self.font_smalltip)
 
         self.fingerStatus.setGeometry(0, 879, 600, 77) # centerize or smth
         self.fingerStatus.setAlignment(QtCore.Qt.AlignmentFlag.AlignHCenter)
@@ -262,13 +272,22 @@ class Main(QWidget):
                 await asyncio.sleep(float(cfg["Generic"]["FingerprintStatusUpdateTime"]))
                 self.dateTimeTimer.start(1000)
             case FingerPrintStatus.FINGERPRINT_ENROLLMENT:
-                pass # todo: add ENROLLMENT status update feature here.
+                self.startEnrollment()
             case _: # any other status update
                 self.img_LockStatus.setPixmap(self.lockStatusImg[2])
                 self.fingerStatus.setText("알 수 없는 지문입니다.")
                 self.fingerStatus.setStyleSheet(COLOR_FAILED)
                 self.fingerStatus.adjustSize()
                 await asyncio.sleep(float(cfg["Generic"]["FingerprintStatusUpdateTime"]))
+
+    def startEnrollment(self):
+        self.dateTimeTimer.stop()
+
+        # ui setup
+        self.label_CurrentDateTime.setText("환영합니다!")
+        self.label_RoomName.setText("지문 등록을 시작합니다.")
+        self.label_RoomName.adjustSize()
+        
 
     def showError(self, error_name: str):
         full_log = error_name+f"\n\nFINGERPRINT CODE: {self.fingerPrintStatus.name}\nBACKEND CODE: {self.backend.getStatus().name}"

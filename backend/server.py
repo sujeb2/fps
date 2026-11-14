@@ -35,6 +35,7 @@ class MainBackend:
                     nametag TEXT NOT NULL,
                     fingerid TEXT NOT NULL,
                     fingertag TEXT NOT NULL,
+                    isadmin, INTEGER NOT NULL,
                     created_at TEXT DEFAULT CURRENT_TIMESTAMP
                 )
                 ''')
@@ -65,7 +66,7 @@ class MainBackend:
     def fetchInformation(self, id: int):
         with sqlite3.connect(self.db_path) as db:
             row = db.execute(
-                'SELECT id, name, nametag, fingerid, fingertag, created_at FROM fingerprint WHERE id = ?',
+                'SELECT id, name, nametag, fingerid, fingertag, isadmin, created_at FROM fingerprint WHERE id = ?',
                 (id,),
             ).fetchone()
         if row is None:

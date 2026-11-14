@@ -1,4 +1,4 @@
-import requests, esptool, subprocess
+import requests, esptool, subprocess, ssl
 from serial import Serial
 from enum import Enum
 from urllib.parse import urljoin
@@ -22,11 +22,11 @@ class Update():
         super().__init__()
         print('update: start checking update')
         self.firmwareUploadPort = port
-        self.versionRequestUrl = "http://fpsversion.songro.kro.kr/"
-        self.fileRequestUrl = "http://fpsota.songro.kro.kr/"
+        self.url = "https://fps-ota.pages.dev"
         self.currentVersion = current_ver
         self.isUpdateRequired = False
         self.newVersion = ''
+        self.gotVersionInfo = []
         if(self.firmwareUploadPort != ''):
             try:
                 self.serial = Serial(port=str(self.firmwareUploadPort), baudrate=9600)
@@ -38,32 +38,36 @@ class Update():
 
     def checkUpdate(self):
         headers = {"User-Agent": "FPSRequester/1.0", 'Content-Type': 'text/html; charset=utf-8'}
-        if(self.versionRequestUrl == False): # invalid url
+        if(self.url == False): # invalid url
             print('update: update url is invalid or empty.')
             exit(UpdateStatus.UPDATE_URL_INVALID_OR_EMPTY.name)
 
-        ver_request = requests.get(self.versionRequestUrl, headers=headers, verify=False)
-        got_ver = ver_request.text.strip() # .content is bytes, .text is str
-        print(f'update: requested, version got: {got_ver}')
-        if(ver_request.status_code != 200): # server rejection
-            print('update: failed to check update!!')
-            exit(UpdateStatus.UPDATE_SERVER_REJECTED.name)
-        elif got_ver != self.currentVersion:
-            print(f'update: latest update found!! new version: {got_ver}, current version: {self.currentVersion}')
-            self.isUpdateRequired = True
-            self.newVersion = got_ver
+        ver_request = requests.get(f"{self.url}/version.json", headers=headers, verify=False)
+        if ver_request.status_code == 200:
+            self.gotVersionInfo = ver_request.json()
+            got_ver = self.gotVersionInfo["version"]
+            print(f'update: requested, version got: {got_ver}')
+            if(ver_request.status_code != 200): # server rejection
+                print('update: failed to check update!!')
+                exit(UpdateStatus.UPDATE_SERVER_REJECTED.name)
+            elif got_ver != self.currentVersion:
+                print(f'update: latest update found!! new version: {got_ver}, current version: {self.currentVersion}')
+                self.isUpdateRequired = True
+                self.newVersion = got_ver
+            else:
+                print(f'update: no update found')
+                self.isUpdateRequired = False
+                self.newVersion = self.currentVersion
         else:
-            print(f'update: no update found')
-            self.isUpdateRequired = False
-            self.newVersion = self.currentVersion
+            print('update: ota sever is not available at this moment please try again later.')
 
     def startUpdate(self):
         headers = {"User-Agent": "FPSRequester/1.0", 'Content-Type': 'text/html; charset=utf-8'}
-        if(self.versionRequestUrl == False): # invalid url
+        if(self.url == False): # invalid url
             print('update: update url is invalid or empty.')
             exit(UpdateStatus.UPDATE_URL_INVALID_OR_EMPTY.name)
 
-        ver_request = requests.get(self.versionRequestUrl, headers=headers, verify=False)
+        ver_request = requests.get(self.url, headers=headers, verify=False)
         print(f'update: requested, version got: {ver_request.content}')
 
         if self.isUpdateRequired: 
@@ -72,20 +76,24 @@ class Update():
                 print('update: port closed')
                 header = {"User-Agent": "FPSFileRequester/1.0"}
                 print('update: start downloading firmware')
-                file_request = requests.get(urljoin(self.fileRequestUrl, f"firmware-v{self.newVersion}.bin"), header)
-                try:
-                    with open("data/firmware-loaded/firmware-new.bin", "wb+") as f:
-                        f.write(file_request.content)
-                        print('update: download done!!')
-                    runnable = ['--port', self.firmwareUploadPort, 'write_flash', '0x1000', "firmware-new.bin"]
-                    esptool.main(runnable)
-                    print('update: update done, please restart the system')
-                except subprocess.CalledProcessError:
-                    exit(UpdateStatus.FIRMWARE_WRITE_REJECTED.name)
-                except FileNotFoundError:
-                    exit(UpdateStatus.FIRMWARE_FILE_VERIFY_FAILED.name)
-                except Exception:
-                    exit(UpdateStatus.GENERIC_FIRMWARE_ERROR.name)
+                file_request = requests.get(urljoin(self.url, self.gotVersionInfo["file_name"]), header)
+                if file_request.status_code == 200:
+                    try:
+                        with open("data/firmware-loaded/firmware-new.bin", "wb+") as f:
+                            f.write(file_request.content)
+                        print(f'update: download done!! (filesize: {len(file_request.content)}bytes.)')
+                        print('update: start uploading..')
+                        runnable = ['--port', self.firmwareUploadPort, 'write_flash', '0x1000', "firmware-new.bin"]
+                        esptool.main(runnable)
+                        print('update: update done, please restart the system')
+                    except subprocess.CalledProcessError:
+                        exit(UpdateStatus.FIRMWARE_WRITE_REJECTED.name)
+                    except FileNotFoundError:
+                        exit(UpdateStatus.FIRMWARE_FILE_VERIFY_FAILED.name)
+                    except Exception:
+                        exit(UpdateStatus.GENERIC_FIRMWARE_ERROR.name)
+                else: # server invalid or unavailable
+                    exit(UpdateStatus.UPDATE_SERVER_REJECTED.name)
             else:
                 exit(UpdateStatus.MODULE_NOT_FOUND.name)
         else: print('update: cannot find any other new updates available.')
