@@ -123,6 +123,15 @@ class MainBackend:
             slot += 1
         return slot
 
+    def findUserBySlot(self, slot: int): # enrolled user stored in this sensor slot, None if unknown
+        with sqlite3.connect(self.db_path) as db:
+            rows = db.execute('SELECT id, fingerid, fingertag FROM fingerprint').fetchall()
+        for record_id, enc_fingerid, fingertag in rows: # fingerid is encrypted, so it can't be matched in sql
+            fingerid = self.encryptionEnviron.decryptEncryptedKey(enc_fingerid, fingertag).decode('utf-8')
+            if fingerid.isdigit() and int(fingerid) == slot:
+                return self.fetchInformation(record_id)
+        return None
+
     def findUserIdsByName(self, name: str): # every enrolled id with this name
         target = ''.join(name.split())
         if not target:

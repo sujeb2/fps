@@ -11,6 +11,13 @@
 #define FINGER_WAIT_MS 20000UL // give up waiting for a finger after this
 #define IMAGE_RETRY 3          // bad images allowed per scan before failing
 #define COMMAND_MAX_LEN 64
+#define SCAN_INTERVAL_MS 100UL // idle sensor polling period
+
+// door lock relay, change to match the wiring
+#define LOCK_PIN 4             // GPIO driving the relay / lock driver
+#define LOCK_ACTIVE HIGH       // level that OPENS the lock (LOW for active-low relay boards)
+#define UNLOCK_MS 3000UL       // how long the lock stays open
+#define UNLOCK_COMMAND "QR_UNLOCK" // must match [QRCode] UnlockCommand in conf.ini
 
 #if (defined(__AVR__) || defined(ESP8266)) && !defined(__AVR_ATmega2560__) // serial module set
 #define FINGERPRINT_LINE1 2
@@ -26,13 +33,42 @@ Adafruit_Fingerprint module = Adafruit_Fingerprint(&sensorSerial);
 bool sensorReady = false;
 String command;
 
+bool lockOpen = false;
+unsigned long lockOpenedAt = 0;
+unsigned long lastScanAt = 0;
+bool fingerLatched = false; // a result was already sent for the finger on the sensor
+
 void reply(const char *token) {
     Serial.println(token);
 }
 
+/* ---------- door lock ---------- */
+
+void lockDoor() {
+    digitalWrite(LOCK_PIN, LOCK_ACTIVE == HIGH ? LOW : HIGH);
+    lockOpen = false;
+}
+
+void unlockDoor() {
+    digitalWrite(LOCK_PIN, LOCK_ACTIVE);
+    lockOpen = true;
+    lockOpenedAt = millis(); // a second unlock while open restarts the timer
+    Serial.println(F("LOG:door unlocked"));
+}
+
+void serviceLock() { // called from every wait loop so the door never stays open
+    if (lockOpen && millis() - lockOpenedAt >= UNLOCK_MS) {
+        lockDoor();
+        Serial.println(F("LOG:door locked"));
+    }
+}
+
+/* ---------- enrollment ---------- */
+
 const char *waitForImage() {
     unsigned long start = millis();
     while (millis() - start < FINGER_WAIT_MS) {
+        serviceLock();
         uint8_t p = module.getImage();
         if (p == FINGERPRINT_OK) return NULL;
         if (p != FINGERPRINT_NOFINGER && p != FINGERPRINT_IMAGEFAIL) return "FAILED"; // sensor communicate error
@@ -44,6 +80,7 @@ const char *waitForImage() {
 const char *waitForRemoval() {
     unsigned long start = millis();
     while (millis() - start < FINGER_WAIT_MS) {
+        serviceLock();
         uint8_t p = module.getImage();
         if (p == FINGERPRINT_NOFINGER) return NULL;
         if (p != FINGERPRINT_OK && p != FINGERPRINT_IMAGEFAIL) return "FAILED";
@@ -94,6 +131,9 @@ const char *enrollFingerprint(uint16_t slot) {
     p = module.storeModel(slot);
     switch (p) {
     case FINGERPRINT_OK:
+        module.getTemplateCount();
+        Serial.print(F("LOG:templates stored "));
+        Serial.println(module.templateCount);
         return "ENROLLED";
     case FINGERPRINT_BADLOCATION:
         return "BAD_LOCATION";
@@ -104,10 +144,61 @@ const char *enrollFingerprint(uint16_t slot) {
     }
 }
 
+/* ---------- idle scanning ---------- */
+
+void scanFingerprint() {
+    uint8_t p = module.getImage();
+    if (p == FINGERPRINT_NOFINGER) {
+        fingerLatched = false; // finger lifted, next touch is a new scan
+        return;
+    }
+    if (p != FINGERPRINT_OK) {
+        if (p != FINGERPRINT_IMAGEFAIL) {
+            Serial.print(F("LOG:sensor error 0x"));
+            Serial.println(p, HEX);
+        }
+        return;
+    }
+    if (fingerLatched) return; // same touch, already answered
+
+    p = module.image2Tz(1);
+    if (p != FINGERPRINT_OK) return; // messy or partial image, try again next poll
+
+    fingerLatched = true;
+    p = module.fingerSearch(1);
+    if (p == FINGERPRINT_OK) {
+        Serial.print(F("LOG:match confidence "));
+        Serial.println(module.confidence);
+        Serial.print(F("SUCCESS:")); // matched sensor slot, the host maps it to a user
+        Serial.println(module.fingerID);
+        unlockDoor();
+    } else if (p == FINGERPRINT_NOTFOUND) {
+        reply("NOT_FOUND");
+    } else {
+        fingerLatched = false; // communication error, retry this touch
+        Serial.print(F("LOG:search error 0x"));
+        Serial.println(p, HEX);
+    }
+}
+
+/* ---------- host commands ---------- */
+
 void handleCommand(String cmd) {
     cmd.trim();
+    if (cmd.length() == 0) return;
     String upper = cmd;
     upper.toUpperCase();
+
+    if (upper == "PING") {
+        reply(sensorReady ? "READY" : "SENSOR_NOT_FOUND");
+        return;
+    }
+
+    if (upper == UNLOCK_COMMAND) { // qrcode approved on the host, works without the sensor
+        unlockDoor();
+        reply("READY");
+        return;
+    }
 
     if (!sensorReady) {
         reply("SENSOR_NOT_FOUND");
@@ -122,11 +213,8 @@ void handleCommand(String cmd) {
         } else {
             reply(enrollFingerprint((uint16_t)slot));
         }
+        fingerLatched = true; // finger may still be down, don't scan it as a login
         reply("READY");
-    } else if (upper == "PING") {
-        reply("READY");
-    } else if (upper = "") {
-
     } else {
         Serial.print(F("LOG:unknown command "));
         Serial.println(cmd);
@@ -134,6 +222,9 @@ void handleCommand(String cmd) {
 }
 
 void setup() {
+    pinMode(LOCK_PIN, OUTPUT);
+    lockDoor(); // locked before anything else
+
     Serial.begin(HOST_BAUD);
     while (!Serial)
         ; // For Yun/Leo/Micro/Zero/...
@@ -148,12 +239,12 @@ void setup() {
     }
 
     module.getParameters();
+    module.getTemplateCount();
     Serial.print(F("LOG:capacity "));
     Serial.print(module.capacity);
     Serial.print(F(", security level "));
     Serial.print(module.security_level);
     Serial.print(F(", templates stored "));
-    module.getTemplateCount();
     Serial.println(module.templateCount);
 
     sensorReady = true;
@@ -169,5 +260,12 @@ void loop() {
         } else if (command.length() < COMMAND_MAX_LEN) {
             command += c;
         }
+    }
+
+    serviceLock();
+
+    if (sensorReady && millis() - lastScanAt >= SCAN_INTERVAL_MS) {
+        lastScanAt = millis();
+        scanFingerprint();
     }
 }

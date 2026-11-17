@@ -31,7 +31,7 @@ class FingerPrintStatus(Enum):
     ENROLL_MISMATCH = 17 # first and second scan were different fingers
     ENROLL_TIMEOUT = 18 # no finger in time
 
-# one token per line from the firmware (see firmware/main.ino)
+# one token per line from the firmware (see firmware/firmware.ino)
 RESPONSES = {
     "READY": FingerPrintStatus.DEVICE_IDLE,
     "SENSOR_NOT_FOUND": FingerPrintStatus.DEVICE_NOT_SETUP,
@@ -64,6 +64,7 @@ class FingerPrint():
         self.isdemo = isdemo
         self.ser = None # no serial in demo mode
         self.buffer = b''
+        self.matchedSlot = None # sensor slot of the last SUCCESS:<slot>
         if not isdemo and self.status != FingerPrintStatus.DEVICE_NOT_SETUP:
             try:
                 self.ser = serial.Serial(self.port, 9600, timeout=0) # non blocking, read() is polled from the ui timer
@@ -99,7 +100,10 @@ class FingerPrint():
             if text.startswith('LOG:'):
                 print(f'module: {text[4:]}')
                 continue
-            status = RESPONSES.get(text)
+            token, _, arg = text.partition(':') # SUCCESS:<slot> carries the matched slot
+            status = RESPONSES.get(token)
+            if status == FingerPrintStatus.SCAN_SUCCESS:
+                self.matchedSlot = int(arg) if arg.isdigit() else None
             if status is None:
                 print(f'module: unknown response "{text}"')
                 continue

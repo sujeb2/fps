@@ -280,13 +280,28 @@ class Main(QWidget):
         if not self.dateTimeTimer.isActive():
             self.dateTimeTimer.start(1000)
 
-    async def scanUpdateUISetup(self, status: FingerPrintStatus): # fingerprint status update
+    def matchedUserName(self): # name of the user in the slot the module just matched
+        slot = self.fingerPrintModule.matchedSlot
+        if slot is None:
+            return None
+        try:
+            information = self.backend.findUserBySlot(slot)
+        except (sqlite3.Error, ValueError) as e:
+            print(f'scan: cannot look up sensor slot #{slot} ({e})')
+            return None
+        if information is None:
+            print(f'scan: sensor slot #{slot} matched but is not in the db')
+            return None
+        return information['name']
+
+    async def scanUpdateUISetup(self, status: FingerPrintStatus, name: str | None = None): # fingerprint status update
         if not status:
             raise ValueError("Invalid User name parameter.")
         match status:
             case FingerPrintStatus.SCAN_SUCCESS: # fingerprint success
                 self.dateTimeTimer.stop()
-                self.label_CurrentDateTime.setText(f"안녕하세요, (USRNAME)님.")
+                self.label_CurrentDateTime.setText(f"안녕하세요, {name}님." if name else "안녕하세요.")
+                self.label_CurrentDateTime.adjustSize()
                 self.fingerStatus.setText("확인 되었습니다.")
                 self.fingerStatus.setStyleSheet(COLOR_SUCCESS)
                 self.fingerStatus.adjustSize()
@@ -366,7 +381,6 @@ class Main(QWidget):
         self.fingerStatus.setText(text)
         self.fingerStatus.setStyleSheet(color)
 
-
     def showError(self, error_name: str):
         full_log = error_name+f"\n\nFINGERPRINT CODE: {self.fingerPrintStatus.name}\nBACKEND CODE: {self.backend.getStatus().name}"
 
@@ -414,7 +428,9 @@ class Main(QWidget):
                 self.handleEnrollEvent(event)
             elif self.qrToken: # qrcode authentication in progress
                 continue
-            elif event in (FingerPrintStatus.SCAN_SUCCESS, FingerPrintStatus.FINGERPRINT_UNKNOWN):
+            elif event == FingerPrintStatus.SCAN_SUCCESS:
+                asyncio.run(self.scanUpdateUISetup(event, self.matchedUserName()))
+            elif event == FingerPrintStatus.FINGERPRINT_UNKNOWN:
                 asyncio.run(self.scanUpdateUISetup(event))
 
 if __name__ == '__main__':
