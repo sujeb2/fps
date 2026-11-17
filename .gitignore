@@ -10,4 +10,4 @@ ota-update/release_firmware.py
 assets/temp_qrcode/
 .vscode
 main.build/
-main.dist/
+dist/
