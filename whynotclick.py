@@ -1,16 +1,15 @@
 from PySide6.QtWidgets import QLabel
-from PySide6.QtCore import pyqtSignal
-from PySide6.QtCore import QEvent, pyqtSignal, QObject
+from PySide6.QtCore import QEvent, Signal, QObject
 from PySide6.QtGui import QMouseEvent
 
 def clickable(widget):
     class Filter(QObject):
-        clicked = pyqtSignal()
+        clicked = Signal()
         
         def eventFilter(self, obj, event):
             if obj == widget:
-                if event.type() == QEvent.MousePressEvent:
-                    if obj.rect().contains(event.pos()):
+                if event.type() == QEvent.Type.MousePressEvent:
+                    if obj.rect().contains(event.position().toPoint()):
                         self.clicked.emit()
                         return True
             return False
@@ -20,7 +19,7 @@ def clickable(widget):
     return filter.clicked
 
 class Label(QLabel):
-    clicked = pyqtSignal()
+    clicked = Signal()
     def __init__(self, parent=None):
         QLabel.__init__(self, parent=parent)
 
