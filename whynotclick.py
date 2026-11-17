@@ -1,7 +1,7 @@
-from PyQt6.QtWidgets import QLabel
-from PyQt6.QtCore import pyqtSignal
-from PyQt6.QtCore import QEvent, pyqtSignal, QObject
-from PyQt6.QtGui import QMouseEvent
+from PySide6.QtWidgets import QLabel
+from PySide6.QtCore import pyqtSignal
+from PySide6.QtCore import QEvent, pyqtSignal, QObject
+from PySide6.QtGui import QMouseEvent
 
 def clickable(widget):
     class Filter(QObject):

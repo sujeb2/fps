@@ -17,4 +17,5 @@ python -m nuitka --mode=standalone $CCACHE_FLAG \
   --include-package-data=esptool \
   --windows-console-mode=disable \
   --include-data-dir=assets=assets \
+  --no-deployment-flag=excluded-module-usage \
   main.py
