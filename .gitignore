@@ -12,3 +12,4 @@ assets/temp_qrcode/
 main.build/
 main.dist/
 dist/
+nuitka-crash-report.xml
