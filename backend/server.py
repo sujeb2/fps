@@ -35,10 +35,13 @@ class MainBackend:
                     nametag TEXT NOT NULL,
                     fingerid TEXT NOT NULL,
                     fingertag TEXT NOT NULL,
-                    isadmin, INTEGER NOT NULL,
+                    isadmin INTEGER NOT NULL DEFAULT 0,
                     created_at TEXT DEFAULT CURRENT_TIMESTAMP
                 )
                 ''')
+                columns = [row[1] for row in db.execute('PRAGMA table_info(fingerprint)')]
+                if 'isadmin' not in columns: # databases made before isadmin existed
+                    db.execute('ALTER TABLE fingerprint ADD COLUMN isadmin INTEGER NOT NULL DEFAULT 0')
                 db.execute('''CREATE TABLE IF NOT EXISTS qrsession(
                     token TEXT PRIMARY KEY,
                     status INTEGER NOT NULL DEFAULT 0,
@@ -71,7 +74,7 @@ class MainBackend:
             ).fetchone()
         if row is None:
             return None
-        record_id, name, nametag, fingerid, fingertag, created_at = row
+        record_id, name, nametag, fingerid, fingertag, isadmin, created_at = row
         return {
             'id': record_id,
             'name': self.encryptionEnviron.decryptEncryptedKey(name, nametag).decode('utf-8'),
@@ -106,6 +109,19 @@ class MainBackend:
                 (encrypted_name[0], encrypted_name[1], encrypted_fingerid[0], encrypted_fingerid[1]),
             )
             return cursor.lastrowid
+
+    def nextFingerSlot(self): # lowest sensor slot (1..) not used by an enrolled user
+        with sqlite3.connect(self.db_path) as db:
+            rows = db.execute('SELECT fingerid, fingertag FROM fingerprint').fetchall()
+        used = set()
+        for enc_fingerid, fingertag in rows:
+            fingerid = self.encryptionEnviron.decryptEncryptedKey(enc_fingerid, fingertag).decode('utf-8')
+            if fingerid.isdigit():
+                used.add(int(fingerid))
+        slot = 1
+        while slot in used:
+            slot += 1
+        return slot
 
     def findUserIdsByName(self, name: str): # every enrolled id with this name
         target = ''.join(name.split())

@@ -1,4 +1,4 @@
-PyQt6
+pyside6
 pyserial
 fastapi[standard]
 pycryptodome
@@ -6,3 +6,4 @@ esptool
 fonttools
 qrcode[pil]
 easyocr
+nuitka

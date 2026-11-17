@@ -30,6 +30,7 @@ class Update():
         if(self.firmwareUploadPort != ''):
             try:
                 self.serial = Serial(port=str(self.firmwareUploadPort), baudrate=9600)
+                self.serial.close() # only a presence check, the fingerprint module needs this port (exclusive on windows)
                 self.checkUpdate()
             except:
                 print(f'update: cannot find port named {port}, only checking update..')

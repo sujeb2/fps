@@ -1,13 +1,13 @@
-import configparser, sys, platform, argparse, asyncio, whynotclick
+import configparser, sys, platform, argparse, asyncio, sqlite3, whynotclick
 from fontTools.ttLib import TTFont
 from fingerprint import FingerPrintStatus, FingerPrint
 from backend.server import BackendStatus, MainBackend, QRSessionStatus
 from qrgenerator import QRCode
 
-from PyQt6.QtWidgets import QWidget, QLabel, QApplication
-from PyQt6.QtGui import QPixmap
-from PyQt6.QtCore import QDateTime
-from PyQt6 import QtCore
+from PySide6.QtWidgets import QWidget, QLabel, QApplication
+from PySide6.QtGui import QPixmap
+from PySide6.QtCore import QDateTime
+from PySide6 import QtCore
 from update import Update
 
 cfg = configparser.ConfigParser()
@@ -18,8 +18,26 @@ COLOR_FAILED = f'background-color : white; Color : #ff3f2e;'
 COLOR_SUCCESS = f'background-color : white; Color : #9dff73;'
 QRCODE_SIZE = 150 # fits between status warning and finger status text
 
+# enrollment progress shown on fingerStatus while the module walks through the scan
+ENROLL_PROGRESS = {
+    FingerPrintStatus.FINGERPRINT_ENROLLMENT: ("지문 등록을 시작합니다.", COLOR_MAIN),
+    FingerPrintStatus.ENROLL_PLACE_FINGER: ("센서에 손가락을 올려주세요.", COLOR_MAIN),
+    FingerPrintStatus.ENROLL_CAPTURED: ("인식되었습니다.", COLOR_MAIN),
+    FingerPrintStatus.ENROLL_REMOVE_FINGER: ("손가락을 떼주세요.", COLOR_MAIN),
+    FingerPrintStatus.ENROLL_PLACE_AGAIN: ("같은 손가락을 다시 올려주세요.", COLOR_MAIN),
+    FingerPrintStatus.ENROLL_IMAGE_ERROR: ("지문이 선명하지 않습니다. 다시 올려주세요.", COLOR_FAILED),
+}
+# enrollment results that end an attempt, True when it is worth asking again
+ENROLL_FAILURES = {
+    FingerPrintStatus.ENROLL_MISMATCH: ("두 지문이 일치하지 않습니다.", True),
+    FingerPrintStatus.ENROLL_TIMEOUT: ("시간이 초과되었습니다.", True),
+    FingerPrintStatus.FINGERPRINT_FAILED: ("지문 등록에 실패했습니다.", True),
+    FingerPrintStatus.DEVICE_FLASH_ERROR: ("센서에 저장하지 못했습니다.", False),
+    FingerPrintStatus.DEVICE_BAD_LOCATION: ("저장 위치가 올바르지 않습니다.", False),
+}
+
 class Main(QWidget):
-    def __init__(self, isdemo):
+    def __init__(self, isdemo, enrollName=''):
         self.isdemo = isdemo
         print(f'Start fps-project.. PyQt Version: {QtCore.qVersion()}, isdemo: {self.isdemo}')
         super().__init__()
@@ -42,6 +60,7 @@ class Main(QWidget):
         # fingerprint
         self.fingerPrintModule = FingerPrint(self.isdemo)
         self.fingerPrintStatus = self.fingerPrintModule.getStatus()
+        self.enrollment = None # {'name', 'slot', 'attempt', 'sent'} while enrolling
 
         # qrcode
         self.qrcode = QRCode()
@@ -76,6 +95,9 @@ class Main(QWidget):
             self.dateTimeTimer = QtCore.QTimer(self)
             self.dateTimeTimer.timeout.connect(self.updateCurrentDateTime)
             self.dateTimeTimer.start(1000)
+
+        if enrollName and self.fingerPrintStatus != FingerPrintStatus.DEVICE_NOT_SETUP:
+            self.startEnrollment(enrollName)
 
         if platform.system() not in ('Darwin', 'Windows'):
             self.showMaximized()
@@ -271,8 +293,6 @@ class Main(QWidget):
                 self.img_LockStatus.setPixmap(self.lockStatusImg[1])
                 await asyncio.sleep(float(cfg["Generic"]["FingerprintStatusUpdateTime"]))
                 self.dateTimeTimer.start(1000)
-            case FingerPrintStatus.FINGERPRINT_ENROLLMENT:
-                self.startEnrollment()
             case _: # any other status update
                 self.img_LockStatus.setPixmap(self.lockStatusImg[2])
                 self.fingerStatus.setText("알 수 없는 지문입니다.")
@@ -280,14 +300,72 @@ class Main(QWidget):
                 self.fingerStatus.adjustSize()
                 await asyncio.sleep(float(cfg["Generic"]["FingerprintStatusUpdateTime"]))
 
-    def startEnrollment(self):
+    def startEnrollment(self, name: str):
+        if self.enrollment: # already enrolling
+            return
+        self.enrollment = {'name': name, 'slot': self.backend.nextFingerSlot(), 'attempt': 0, 'sent': False}
+        print(f'enroll: {name} -> sensor slot #{self.enrollment["slot"]}')
         self.dateTimeTimer.stop()
 
         # ui setup
         self.label_CurrentDateTime.setText("환영합니다!")
+        self.label_CurrentDateTime.adjustSize()
         self.label_RoomName.setText("지문 등록을 시작합니다.")
         self.label_RoomName.adjustSize()
-        
+        self.img_LockStatus.setPixmap(self.lockStatusImg[3])
+        self.setFingerStatus("모듈을 준비하는 중..", COLOR_MAIN)
+        # the ENROLL command goes out on the next READY (opening the port reboots the esp32, PING covers boards that don't)
+        self.fingerPrintModule.write('PING')
+
+    def sendEnrollCommand(self):
+        self.enrollment['attempt'] += 1
+        self.enrollment['sent'] = self.fingerPrintModule.enroll(self.enrollment['slot'])
+
+    def handleEnrollEvent(self, event: FingerPrintStatus):
+        maxAttempt = int(cfg["Fingerprint"]["RegisterMaxAttampt"])
+        if event == FingerPrintStatus.DEVICE_IDLE: # module is free
+            if not self.enrollment['sent']:
+                self.sendEnrollCommand()
+        elif event in ENROLL_PROGRESS:
+            self.setFingerStatus(*ENROLL_PROGRESS[event])
+        elif event == FingerPrintStatus.ENROLL_SUCCESS:
+            name, slot = self.enrollment['name'], self.enrollment['slot']
+            try:
+                self.backend.writeInformation(name, str(slot))
+            except (sqlite3.Error, ValueError) as e:
+                print(f'enroll: saved on sensor slot #{slot} but not in db ({e})')
+                self.finishEnrollment("등록 정보를 저장하지 못했습니다.", False)
+                return
+            self.finishEnrollment(f"{name}님, 등록이 완료되었습니다.", True)
+        elif event in ENROLL_FAILURES:
+            message, canRetry = ENROLL_FAILURES[event]
+            if canRetry and self.enrollment['attempt'] < maxAttempt:
+                self.setFingerStatus(f"{message} 다시 시도합니다. ({self.enrollment['attempt']}/{maxAttempt})", COLOR_FAILED)
+                self.enrollment['sent'] = False # resent on the READY that follows every result
+            else:
+                self.finishEnrollment(message, False)
+
+    def finishEnrollment(self, message: str, isSuccess: bool):
+        print(f'enroll: {"done" if isSuccess else "failed"}, {message}')
+        self.enrollment = None
+        self.setFingerStatus(message, COLOR_SUCCESS if isSuccess else COLOR_FAILED)
+        self.img_LockStatus.setPixmap(self.lockStatusImg[1] if isSuccess else self.lockStatusImg[2])
+        QtCore.QTimer.singleShot(int(float(cfg["Generic"]["FingerprintStatusUpdateTime"]) * 1000), self.resetEnrollmentUI)
+
+    def resetEnrollmentUI(self):
+        if self.enrollment: # a new enrollment already took over the screen
+            return
+        self.label_RoomName.setText(cfg["School"]["RoomName"] or "지정되지 않은 이름")
+        self.label_RoomName.adjustSize()
+        self.img_LockStatus.setPixmap(self.lockStatusImg[0])
+        self.setFingerStatus("지문을 기다리는 중..", COLOR_MAIN)
+        self.updateCurrentDateTime()
+        self.dateTimeTimer.start(1000)
+
+    def setFingerStatus(self, text: str, color: str):
+        self.fingerStatus.setText(text)
+        self.fingerStatus.setStyleSheet(color)
+
 
     def showError(self, error_name: str):
         full_log = error_name+f"\n\nFINGERPRINT CODE: {self.fingerPrintStatus.name}\nBACKEND CODE: {self.backend.getStatus().name}"
@@ -318,23 +396,34 @@ class Main(QWidget):
         self.label_CurrentDateTime.adjustSize()
 
     def checkFingerprintStatus(self):
-        if self.qrToken: # qrcode authentication in progress
-            return
-        self.status = self.fingerPrintModule.getStatus()
-        match self.status:
-            case FingerPrintStatus.DEVICE_NOT_RESPONSIVE:
-                self.showError(f"모듈 응답이 없습니다.\n이 화면이 처음이면 기기를 재부팅 해주십시오.")
-            case FingerPrintStatus.DEVICE_NOT_SETUP:
-                self.showError(f"모듈이 정상적으로 인식이 되지 않습니다.\n유지보수 판을 열어 모듈의 연결선이 정상적으로 연결이 되어있는지 확인해주십시오.")
-            case _:
-                asyncio.run(self.scanUpdateUISetup(self.status))
+        events = self.fingerPrintModule.read() # drain serial even while qrcode is shown
+        self.fingerPrintStatus = self.fingerPrintModule.getStatus()
+        match self.fingerPrintStatus:
+            case FingerPrintStatus.DEVICE_NOT_RESPONSIVE | FingerPrintStatus.DEVICE_NOT_SETUP:
+                if hasattr(self, 'fingerPrintStatusTicker'):
+                    self.fingerPrintStatusTicker.stop() # error screen is final, don't stack it every tick
+                self.enrollment = None
+                if self.fingerPrintStatus == FingerPrintStatus.DEVICE_NOT_RESPONSIVE:
+                    self.showError(f"모듈 응답이 없습니다.\n이 화면이 처음이면 기기를 재부팅 해주십시오.")
+                else:
+                    self.showError(f"모듈이 정상적으로 인식이 되지 않습니다.\n유지보수 판을 열어 모듈의 연결선이 정상적으로 연결이 되어있는지 확인해주십시오.")
+                return
+
+        for event in events:
+            if self.enrollment:
+                self.handleEnrollEvent(event)
+            elif self.qrToken: # qrcode authentication in progress
+                continue
+            elif event in (FingerPrintStatus.SCAN_SUCCESS, FingerPrintStatus.FINGERPRINT_UNKNOWN):
+                asyncio.run(self.scanUpdateUISetup(event))
 
 if __name__ == '__main__':
     parse = argparse.ArgumentParser()
     parse.add_argument('--demo', default='', help='enable demo mode (module not required)')
+    parse.add_argument('--enroll', default='', metavar='NAME', help='enroll a new fingerprint for NAME on startup')
     arg = parse.parse_args()
 
     app = QApplication(sys.argv[0:])
-    win = Main(arg.demo)
+    win = Main(arg.demo, arg.enroll)
     win.show()
     app.exec()
