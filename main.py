@@ -4,7 +4,8 @@ from fingerprint import FingerPrintStatus, FingerPrint
 from backend.server import BackendStatus, MainBackend, QRSessionStatus
 from qrgenerator import QRCode
 
-from PySide6.QtWidgets import QWidget, QLabel, QApplication
+
+from PySide6.QtWidgets import QWidget, QLabel, QApplication, QInputDialog
 from PySide6.QtGui import QPixmap
 from PySide6.QtCore import QDateTime
 from PySide6 import QtCore
@@ -118,6 +119,8 @@ class Main(QWidget):
 
         self.btn_QRcodeGeneration = whynotclick.Label(self)
         self.btn_QRcodeGeneration.setText("아니면 QR코드 인식하기")
+        self.btn_FingerprintEnroll = whynotclick.Label(self)
+        self.btn_FingerprintEnroll.setText("지문 등록")
 
         # images
         self.img_LockStatus = QLabel(self)
@@ -164,6 +167,7 @@ class Main(QWidget):
         self.fingerStatus.setStyleSheet(COLOR_MAIN)
         self.btn_QRcodeGeneration.setStyleSheet(COLOR_SUB)
         self.label_subTitleText.setStatusTip(COLOR_SUB)
+        self.btn_FingerprintEnroll.setStatusTip(COLOR_SUB)
 
         self.img_SchoolLogo.resize(116, 116)
         self.img_SchoolLogo.move(50, 45)
@@ -174,6 +178,7 @@ class Main(QWidget):
         self.status_ActionWarn.move(50, 505)
         self.btn_QRcodeGeneration.move(137, 946)
         self.label_subTitleText.move(50, 483)
+        self.btn_FingerprintEnroll.move(50, 100)
 
         # qrcode goes to the same spot as lock status image
         lockCenter = QtCore.QRect(self.img_LockStatus.pos(), self.lockStatusImg[0].size()).center()
@@ -185,13 +190,17 @@ class Main(QWidget):
         self.label_CurrentDateTime.setFont(self.font_date)
         self.btn_QRcodeGeneration.setFont(self.font_sub)
         self.label_subTitleText.setFont(self.font_smalltip)
+        self.btn_FingerprintEnroll.setFont(self.font_smalltip)
 
-        self.fingerStatus.setGeometry(0, 879, 600, 77) # centerize or smth
-        self.fingerStatus.setAlignment(QtCore.Qt.AlignmentFlag.AlignHCenter)
+        self.fingerStatus.setGeometry(16, 869, self.width() - 32, 77)
+        self.fingerStatus.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        self.fingerStatus.setWordWrap(True)
+
         self.label_SchoolName.adjustSize()
         self.label_RoomName.adjustSize()
 
         self.btn_QRcodeGeneration.clicked.connect(self.genQRCode)
+        self.btn_FingerprintEnroll.clicked.connect(self.startEnrollment)
 
         # qrcode session checker (started when qrcode is shown)
         self.qrStatusTicker = QtCore.QTimer(self)
@@ -304,7 +313,6 @@ class Main(QWidget):
                 self.label_CurrentDateTime.adjustSize()
                 self.fingerStatus.setText("확인 되었습니다.")
                 self.fingerStatus.setStyleSheet(COLOR_SUCCESS)
-                self.fingerStatus.adjustSize()
                 self.img_LockStatus.setPixmap(self.lockStatusImg[1])
                 await asyncio.sleep(float(cfg["Generic"]["FingerprintStatusUpdateTime"]))
                 self.dateTimeTimer.start(1000)
@@ -312,7 +320,6 @@ class Main(QWidget):
                 self.img_LockStatus.setPixmap(self.lockStatusImg[2])
                 self.fingerStatus.setText("알 수 없는 지문입니다.")
                 self.fingerStatus.setStyleSheet(COLOR_FAILED)
-                self.fingerStatus.adjustSize()
                 await asyncio.sleep(float(cfg["Generic"]["FingerprintStatusUpdateTime"]))
 
     def startEnrollment(self, name: str):
@@ -435,11 +442,27 @@ class Main(QWidget):
 
 if __name__ == '__main__':
     parse = argparse.ArgumentParser()
-    parse.add_argument('--demo', default='', help='enable demo mode (module not required)')
-    parse.add_argument('--enroll', default='', metavar='NAME', help='enroll a new fingerprint for NAME on startup')
+    parse.add_argument('--demo', default='', help='enable demo mode')
+    parse.add_argument(
+        '--enroll', nargs='?', const='', default=None, metavar='NAME',
+        help='enroll a fingerprint, prompting for a name if omitted',
+    )
     arg = parse.parse_args()
 
-    app = QApplication(sys.argv[0:])
-    win = Main(arg.demo, arg.enroll)
+    if arg.enroll is not None and arg.demo:
+        parse.error('--enroll requires a connected sensor. Omit --demo.')
+
+    app = QApplication(sys.argv[:1])
+    enroll_name = (arg.enroll or '').strip()
+
+    if arg.enroll is not None and not enroll_name:
+        name, accepted = QInputDialog.getText(
+            None, '지문 등록', '등록할 이름을 입력하세요.',
+        )
+        enroll_name = name.strip()
+        if not accepted or not enroll_name:
+            sys.exit(0)
+
+    win = Main(arg.demo, enroll_name)
     win.show()
     app.exec()
