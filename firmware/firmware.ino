@@ -24,7 +24,9 @@
 #define FINGERPRINT_LINE2 3
 SoftwareSerial sensorSerial(FINGERPRINT_LINE1, FINGERPRINT_LINE2);
 #elif defined(ESP32)
-#define sensorSerial Serial2 // RX GPIO16, TX GPIO17. Serial1's default pins are wired to flash on ESP32
+#define SENSOR_RX_PIN 25  // Connect to fingerprint sensor TX
+#define SENSOR_TX_PIN 26  // Connect to fingerprint sensor RX
+#define sensorSerial Serial2
 #else
 #define sensorSerial Serial1
 #endif
@@ -232,7 +234,12 @@ void setup() {
     Serial.print(F("LOG:firmware version "));
     Serial.println(F(FIRMWAREVERSION));
 
-    module.begin(SENSOR_BAUD);
+    #if defined(ESP32)
+        sensorSerial.begin(SENSOR_BAUD, SERIAL_8N1, SENSOR_RX_PIN, SENSOR_TX_PIN);
+        delay(1000);  // Give the fingerprint sensor time to boot
+    #else
+        module.begin(SENSOR_BAUD);
+    #endif
     if (!module.verifyPassword()) {
         reply("SENSOR_NOT_FOUND"); // keep running so the host still gets an answer
         return;
